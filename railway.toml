@@ -1,6 +1,6 @@
 [build]
-builder = "nixpacks"
-buildCommand = "npm install && npm run build"
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "npm run start"
@@ -10,6 +10,3 @@ restartPolicyMaxRetries = 3
 [env]
 NODE_ENV = "production"
 PORT = "3001"
-
-[nixpacks]
-providers = ["nodejs-20"]
