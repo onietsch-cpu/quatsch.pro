@@ -10,3 +10,6 @@ restartPolicyMaxRetries = 3
 [env]
 NODE_ENV = "production"
 PORT = "3001"
+
+[nixpacks]
+providers = ["nodejs-20"]
