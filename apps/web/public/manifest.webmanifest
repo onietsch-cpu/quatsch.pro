@@ -1,0 +1,30 @@
+{
+  "name": "CE Translator",
+  "short_name": "Translator",
+  "description": "CE Translator – instantly translate speech or text into any language, listen to it, and speak it.",
+  "start_url": "/",
+  "scope": "/",
+  "id": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "theme_color": "#0B1F3A",
+  "background_color": "#F7F9FC",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["utilities", "productivity", "travel"],
+  "icons": [
+    {
+      "src": "https://images.hostinger.com/ec22ec56-f0d0-429a-aae5-98eaa52df2ec.png",
+      "sizes": "192x192 512x512 1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://images.hostinger.com/ec22ec56-f0d0-429a-aae5-98eaa52df2ec.png",
+      "sizes": "192x192 512x512 1024x1024",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
