@@ -17,6 +17,8 @@ RUN npm install --global serve@14
 ENV NODE_ENV=production
 ENV PORT=3000
 
+COPY package.json package-lock.json ./
+
 COPY --from=build /app/dist ./dist
 
 EXPOSE 3000
