@@ -18,9 +18,10 @@ ENV NODE_ENV=production
 ENV PORT=3000
 
 COPY package.json package-lock.json ./
+COPY server.js ./
 
 COPY --from=build /app/dist ./dist
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "exec serve -s dist -l tcp://0.0.0.0:${PORT}"]
+CMD ["node", "server.js"]
