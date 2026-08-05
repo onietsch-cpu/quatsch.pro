@@ -5,19 +5,15 @@
   "scripts": {
     "setup": "npm install",
     "dev": "concurrently --kill-others --raw \"npm run dev --prefix apps/web\" \"npm run dev --prefix apps/api\" \"npm run dev --prefix apps/pocketbase\"",
-    "build": "vite build --config apps/web/vite.config.railway.js",
+    "build": "vite build --config vite.config.prod.js",
     "heroku-postbuild": "npm run build --workspace apps/web",
-    "start": "serve -s dist -l tcp://0.0.0.0:${PORT:-3000}",
+    "start": "concurrently --kill-others --raw \"npm run start --prefix apps/api\" \"npm run start --prefix apps/pocketbase\"",
     "lint": "concurrently --raw \"npm run lint --prefix apps/web\" \"npm run lint --prefix apps/api\""
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^6.0.5",
     "concurrently": "^10.0.3"
   },
   "workspaces": [
     "apps/*"
-  ],
-  "dependencies": {
-    "serve": "^14.2.6"
-  }
+  ]
 }

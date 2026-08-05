@@ -45,3 +45,18 @@ Thumbs.db
 # Temp
 vault/temp/
 *.tmp
+
+# Dependencies und Build
+node_modules/
+dist/
+
+# Umgebungsvariablen
+.env
+.env.*
+!.env.example
+
+# Betriebssystem und Logs
+.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
