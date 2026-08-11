@@ -3,22 +3,20 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "setup": "npm install",
+    "setup": "npm ci",
     "dev": "concurrently --kill-others --raw \"npm run dev --prefix apps/web\" \"npm run dev --prefix apps/api\" \"npm run dev --prefix apps/pocketbase\"",
-    "build": "vite build --config apps/web/vite.config.railway.js",
-    "heroku-postbuild": "npm run build --workspace apps/web",
-    "start": "node server.js",
-    "lint": "concurrently --raw \"npm run lint --prefix apps/web\" \"npm run lint --prefix apps/api\""
+    "build": "vite build --config apps/web/vite.config.production.js",
+    "start": "node apps/api/src/main.js",
+    "lint": "concurrently --raw \"npm run lint --prefix apps/web\" \"npm run lint --prefix apps/api\"",
+    "test": "node --test apps/api/test/*.test.js",
+    "check": "npm run lint && npm run test && npm run build"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^6.0.5",
-    "concurrently": "^10.0.3"
+    "concurrently": "^10.0.4",
+    "knip": "^6.32.1"
   },
   "workspaces": [
-    "apps/*"
-  ],
-  "dependencies": {
-    "express": "^4",
-    "serve": "^14.2.6"
-  }
+    "apps/api",
+    "apps/web"
+  ]
 }

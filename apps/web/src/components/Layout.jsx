@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { Mic, MessagesSquare, History, Settings, WifiOff, Loader2 } from 'lucide-react';
-import { checkApiHealth, wakeBackend } from '@/lib/apiHealth';
+import { Mic, MessagesSquare, History, Settings, WifiOff } from 'lucide-react';
 
 const NAV_ITEMS = [
 	{ to: '/', label: 'Translate', icon: Mic, end: true },
@@ -25,48 +24,8 @@ function useOnlineStatus() {
 	return online;
 }
 
-// 'ok' | 'waking' | 'down' — the sandbox backend hibernates when idle, so we
-// wake it on load / tab focus and tell the user while it boots.
-function useBackendStatus(online) {
-	const [status, setStatus] = useState('ok');
-
-	useEffect(() => {
-		let cancelled = false;
-
-		const probe = async () => {
-			if (!navigator.onLine) return;
-			if (await checkApiHealth()) {
-				if (!cancelled) setStatus('ok');
-				return;
-			}
-			if (cancelled) return;
-			setStatus('waking');
-			const up = await wakeBackend({ timeoutMs: 45000 });
-			if (!cancelled) setStatus(up ? 'ok' : 'down');
-		};
-
-		probe();
-		const onVisible = () => {
-			if (document.visibilityState === 'visible') probe();
-		};
-		document.addEventListener('visibilitychange', onVisible);
-		window.addEventListener('online', probe);
-		const interval = setInterval(probe, 120000);
-
-		return () => {
-			cancelled = true;
-			clearInterval(interval);
-			document.removeEventListener('visibilitychange', onVisible);
-			window.removeEventListener('online', probe);
-		};
-	}, [online]);
-
-	return status;
-}
-
 export default function Layout() {
 	const online = useOnlineStatus();
-	const backend = useBackendStatus(online);
 
 	return (
 		<div className="flex min-h-[100dvh] flex-col bg-[#F7F9FC] dark:bg-[#0B1F3A]">
@@ -78,19 +37,6 @@ export default function Layout() {
 					<WifiOff className="h-4 w-4 shrink-0" aria-hidden="true" />
 					You are offline. The app can still be opened, but an internet connection is required for
 					new translations.
-				</div>
-			)}
-
-			{online && backend === 'waking' && (
-				<div role="status" className="flex items-center justify-center gap-2 bg-[#F59E0B] px-4 py-2 text-center text-sm font-semibold text-[#0B1F3A]">
-					<Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
-					The translation service is starting up — this takes a few seconds.
-				</div>
-			)}
-
-			{online && backend === 'down' && (
-				<div role="status" className="flex items-center justify-center gap-2 bg-[#C62828] px-4 py-2 text-center text-sm font-semibold text-white">
-					The translation service is temporarily unavailable. Please try again in a moment.
 				</div>
 			)}
 
