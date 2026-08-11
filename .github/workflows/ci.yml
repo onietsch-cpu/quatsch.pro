@@ -19,6 +19,10 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npm audit --omit=dev --audit-level=high
+      - name: Generate production dependency security patch
+        run: |
+          npm audit fix --package-lock-only --omit=dev
+          git diff -- package-lock.json
+          exit 1
       - run: npm run check
       - run: docker build -t quatsch-pro:${{ github.sha }} .
