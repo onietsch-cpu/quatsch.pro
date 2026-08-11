@@ -19,5 +19,6 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
       - run: npm run check
       - run: docker build -t quatsch-pro:${{ github.sha }} .
