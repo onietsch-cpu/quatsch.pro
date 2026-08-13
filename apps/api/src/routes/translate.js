@@ -30,11 +30,11 @@ export function isValidTranslation(result, sourceText, targetLanguageCode) {
 
 	const targetBase = baseLanguage(targetLanguageCode);
 	const translatedBase = baseLanguage(result.translatedLanguageCode);
-	if (!targetBase || translatedBase !== targetBase) return false;
+	if (targetBase && translatedBase !== targetBase) return false;
 
 	const sourceBase = baseLanguage(result.detectedLanguageCode);
 	const unchanged = normalizeComparableText(result.translation) === normalizeComparableText(sourceText);
-	return !unchanged || sourceBase === targetBase;
+	return !unchanged || !targetBase || sourceBase === targetBase;
 }
 
 async function requestTranslation({ text, targetLanguageName, targetLanguageCode, correction = false }) {
@@ -44,7 +44,7 @@ async function requestTranslation({ text, targetLanguageName, targetLanguageCode
 
 	return generateJson({
 		systemPrompt: SYSTEM_PROMPT,
-		userPrompt: `Target language: ${targetLanguageName} (${targetLanguageCode}). The "translation" field must be entirely in that language, and "translatedLanguageCode" must identify the language actually used.${correctionPrompt}\n\nSource text:\n${text}`,
+		userPrompt: `Target language: ${targetLanguageName} (${targetLanguageCode || 'target locale unspecified'}). The "translation" field must be entirely in that language, and "translatedLanguageCode" must identify the language actually used.${correctionPrompt}\n\nSource text:\n${text}`,
 	});
 }
 
@@ -65,15 +65,15 @@ export default async (req, res) => {
 	if (!targetLanguageName || typeof targetLanguageName !== 'string' || targetLanguageName.length > 100) {
 		return res.status(422).json({ error: 'Target language is required.' });
 	}
-	if (!targetLanguageCode || typeof targetLanguageCode !== 'string' || targetLanguageCode.length > 35) {
-		return res.status(422).json({ error: 'Target language code is required.' });
+	if (targetLanguageCode !== undefined && (typeof targetLanguageCode !== 'string' || targetLanguageCode.length > 35)) {
+		return res.status(422).json({ error: 'Target language code is invalid.' });
 	}
 
 	const sourceText = text.trim();
 	let result = await requestTranslation({ text: sourceText, targetLanguageName, targetLanguageCode });
 
 	if (!isValidTranslation(result, sourceText, targetLanguageCode)) {
-		logger.warn(`translate: invalid output, retrying target="${targetLanguageCode}" ip=${ip}`);
+		logger.warn(`translate: invalid output, retrying target="${targetLanguageCode || targetLanguageName}" ip=${ip}`);
 		result = await requestTranslation({
 			text: sourceText,
 			targetLanguageName,
@@ -83,7 +83,7 @@ export default async (req, res) => {
 	}
 
 	if (!isValidTranslation(result, sourceText, targetLanguageCode)) {
-		logger.error(`translate: invalid output after retry target="${targetLanguageCode}" ip=${ip}`);
+		logger.error(`translate: invalid output after retry target="${targetLanguageCode || targetLanguageName}" ip=${ip}`);
 		return res.status(502).json({ error: 'The translation service returned an invalid translation.' });
 	}
 

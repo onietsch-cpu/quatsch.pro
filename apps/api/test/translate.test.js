@@ -37,3 +37,7 @@ test('accepts unchanged text when it is already in the target language', () => {
 test('rejects missing translation metadata', () => {
 	assert.equal(isValidTranslation({ translation: 'Good morning' }, 'Guten Morgen', 'en'), false);
 });
+
+test('keeps legacy clients without a target code compatible', () => {
+	assert.equal(isValidTranslation({ translation: 'Good morning' }, 'Guten Morgen'), true);
+});
