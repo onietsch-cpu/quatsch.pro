@@ -1,57 +1,35 @@
-# CE Translator – KI-Übersetzungs-App
+# quatsch.pro
 
-Eine mobile-first Progressive Web App (PWA) für bidirektionale Echtzeit-Übersetzung mit Spracheingabe, Sprachausgabe und Foto-Übersetzung.
+Mobile-first Web-App fuer Sprach-, Text- und Bilduebersetzung. Der Produktionsbetrieb besteht aus einem einzelnen Node/Express-Dienst, der die gebaute React-App und die geschuetzte API unter derselben Domain ausliefert.
 
-## Features
+## Funktionen
 
-- **Texttranslation** – 70+ Sprachen, automatische Spracherkennung
-- **Spracheingabe** – Web Speech Recognition API (Mikrofon)
-- **Sprachausgabe** – Browser Speech Synthesis mit sprachspezifischen Stimmen
-- **Dialogmodus** – Bidirektionale Konversation für 2 Personen
-- **Foto-Übersetzer** – OCR + Übersetzung via OpenAI Vision API
-- **Verlauf** – Letzte 20 Übersetzungen (lokal gespeichert)
-- **PWA** – Offline-Support, installierbar auf iOS/Android/Desktop
-- **Dark/Light/System** Theme
+- Texteingabe und automatische Erkennung der Ausgangssprache
+- Sprachaufnahme ueber die Browser Speech Recognition API
+- Einweg- und Dialoguebersetzung
+- Bild-OCR mit anschliessender Uebersetzung
+- Vorlesen mit Browserstimmen und serverseitigem TTS-Fallback
+- Lokaler Verlauf, Einstellungen und installierbare PWA
+- Health Checks, Rate Limits, strukturierte Logs und kontrolliertes Herunterfahren
 
-## Tech Stack
-
-- **Frontend**: React 18 + Vite + Tailwind CSS + shadcn/ui
-- **Backend**: Express.js 5 + Node.js 22
-- **KI**: OpenAI GPT-4o (Übersetzung + OCR) + TTS
-- **Datenbank**: PocketBase (für Bild-Uploads)
-
-## Lokale Entwicklung
+## Lokal starten
 
 ```bash
-# Abhängigkeiten installieren
-npm install
-
-# Umgebungsvariablen konfigurieren
-cp apps/api/.env.example apps/api/.env
-# .env bearbeiten: INTEGRATED_AI_API_KEY=sk-...
-
-# Dev-Server starten
-npm run dev
+cp .env.example .env
+npm ci
+npm run build
+OPENAI_API_KEY=... npm start
 ```
 
-App läuft auf: http://localhost:3000  
-API läuft auf: http://localhost:3001
+Die App ist danach unter `http://localhost:3000` erreichbar. Der Health Check liegt unter `http://localhost:3000/healthz`.
 
-## Deployment
+## Pruefen
 
-- **Vercel**: Siehe [VERCEL_DEPLOYMENT.md](VERCEL_DEPLOYMENT.md)
-- **Heroku**: Siehe [HEROKU_DEPLOYMENT.md](HEROKU_DEPLOYMENT.md)
+```bash
+npm run check
+docker build -t quatsch-pro .
+```
 
-## Umgebungsvariablen
+Alle geheimen Werte werden als Umgebungsvariablen gesetzt. `.env`-Dateien, PocketBase-Livedaten und exportierte Datenbanken duerfen nicht committed werden.
 
-| Variable | Beschreibung | Erforderlich |
-|----------|-------------|--------------|
-| `INTEGRATED_AI_API_KEY` | OpenAI API-Key | ✅ |
-| `INTEGRATED_AI_API_URL` | OpenAI API URL | ✅ |
-| `OPENAI_TTS_MODEL` | TTS-Modell (tts-1) | Optional |
-| `CORS_ORIGIN` | App-URL für CORS | ✅ |
-| `NODE_ENV` | production/development | ✅ |
-
-## Lizenz
-
-Privat / Proprietär – C-Experts
+Weitere Betriebs- und Rollback-Schritte stehen in [DEPLOYMENT.md](DEPLOYMENT.md).

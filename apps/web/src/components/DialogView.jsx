@@ -110,6 +110,7 @@ export default function DialogView({ mode, targetCode, langACode, langBCode, onE
 				const result = await translateText({
 					text: trimmed,
 					targetLanguageName: dest.name,
+					targetLanguageCode: dest.code,
 					honeypot: textHoneypotRef.current?.value ?? '',
 				});
 

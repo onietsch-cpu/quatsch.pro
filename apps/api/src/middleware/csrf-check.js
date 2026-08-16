@@ -39,7 +39,7 @@ export function csrfCheck(req, res, next) {
 			// malformed origin — fall through to block
 		}
 		logger.warn(`csrf-check: origin mismatch origin=${origin} host=${host} ip=${ip}`);
-		return next();
+		return res.status(403).json({ error: 'Origin not allowed.' });
 	}
 
 	// Allow if Referer matches host (browser fallback when Origin is absent)
@@ -53,7 +53,7 @@ export function csrfCheck(req, res, next) {
 			// malformed referer
 		}
 		logger.warn(`csrf-check: referer mismatch referer=${referer} host=${host} ip=${ip}`);
-		return next();
+		return res.status(403).json({ error: 'Referer not allowed.' });
 	}
 
 	// No Origin, no Referer, no custom header — likely a scripted/direct request
