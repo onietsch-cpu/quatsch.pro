@@ -1,7 +1,7 @@
 import logger from '../utils/logger.js';
 import { generateJson } from '../services/ai-provider.js';
 
-const MAX_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_SIZE_BYTES = 8 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const SYSTEM_PROMPT = `You are an OCR and translation engine. Extract all visible text from the supplied image, preserving sensible line breaks, and translate it into the requested target language. Return only JSON with this exact shape: {"extractedText":"all visible text","translation":"translated text","detectedLanguageName":"English language name"}. If there is no text, return empty strings for extractedText and translation.`;
 
@@ -32,7 +32,7 @@ export default async (req, res) => {
 		return res.status(422).json({ error: 'image must be valid base64' });
 	}
 	if (!imageBuffer.length || imageBuffer.length > MAX_SIZE_BYTES) {
-		return res.status(422).json({ error: 'Image must be between 1 byte and 5 MB' });
+		return res.status(422).json({ error: 'Image must be between 1 byte and 8 MB' });
 	}
 
 	const result = await generateJson({

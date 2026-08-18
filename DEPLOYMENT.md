@@ -38,8 +38,8 @@ curl --fail --silent --show-error https://quatsch.pro/hcgi/api/health
 Danach im Browser pruefen:
 
 1. Textuebersetzung in zwei Sprachrichtungen
-2. Mikrofonfreigabe und Spracherkennung auf Mobilgeraet
-3. Bildaufnahme beziehungsweise Upload mit OCR
+2. Dialogmodus auf Mobilgeraet: Aufnahme nur nach explizitem Tastendruck, kein automatischer Richtungswechsel
+3. Bildaufnahme beziehungsweise Upload bis 8 MiB mit OCR und manueller Wiederholung nach einem Fehler
 4. Vorlesen und Browser-Neuladen
 5. PWA-Installation und Verlauf/Einstellungen
 

@@ -6,8 +6,9 @@ Mobile-first Web-App fuer Sprach-, Text- und Bilduebersetzung. Der Produktionsbe
 
 - Texteingabe und automatische Erkennung der Ausgangssprache
 - Sprachaufnahme ueber die Browser Speech Recognition API
-- Einweg- und Dialoguebersetzung
-- Bild-OCR mit anschliessender Uebersetzung
+- Einweguebersetzung mit wechselbarer Zielsprache und manueller Wiederholung bei Fehlern
+- Manuell gesteuerter Dialogmodus ohne automatische Mikrofonaktivierung oder Richtungswechsel
+- Bild-OCR bis 8 MiB mit anschliessender Uebersetzung und manueller Wiederholung
 - Vorlesen mit Browserstimmen und serverseitigem TTS-Fallback
 - Lokaler Verlauf, Einstellungen und installierbare PWA
 - Health Checks, Rate Limits, strukturierte Logs und kontrolliertes Herunterfahren
@@ -30,6 +31,6 @@ npm run check
 docker build -t quatsch-pro .
 ```
 
-Alle geheimen Werte werden als Umgebungsvariablen gesetzt. `.env`-Dateien, PocketBase-Livedaten und exportierte Datenbanken duerfen nicht committed werden.
+Alle geheimen Werte werden als Umgebungsvariablen gesetzt. `.env`-Dateien, PocketBase-Livedaten und exportierte Datenbanken duerfen nicht committed werden. Der aktuelle Produktionspfad verwendet weder PocketBase noch Supabase.
 
 Weitere Betriebs- und Rollback-Schritte stehen in [DEPLOYMENT.md](DEPLOYMENT.md).
