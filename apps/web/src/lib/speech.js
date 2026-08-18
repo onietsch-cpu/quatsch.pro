@@ -221,6 +221,24 @@ export function speak(text, langCode, { onStart, onEnd, onError, rateMultiplier 
 
 	window.speechSynthesis.cancel();
 
+	// One-shot guard: ensure onEnd/onError fire at most once per call, even if
+	// the browser dispatches both events (a known quirk on some mobile WebViews).
+	let settled = false;
+	const safeOnStart = () => {
+		if (settled) return;
+		onStart && onStart();
+	};
+	const safeOnEnd = () => {
+		if (settled) return;
+		settled = true;
+		onEnd && onEnd();
+	};
+	const safeOnError = (info) => {
+		if (settled) return;
+		settled = true;
+		onError && onError(info);
+	};
+
 	const utterance = new SpeechSynthesisUtterance(text);
 	if (voice) {
 		utterance.voice = voice;
@@ -232,15 +250,19 @@ export function speak(text, langCode, { onStart, onEnd, onError, rateMultiplier 
 	const { rate, pitch } = getProsodyForLang(utterance.lang);
 	utterance.rate = rate * rateMultiplier;
 	utterance.pitch = pitch;
-	utterance.onstart = () => onStart && onStart();
-	utterance.onend = () => onEnd && onEnd();
+	utterance.onstart = () => safeOnStart();
+	utterance.onend = () => safeOnEnd();
 	utterance.onerror = (event) => {
 		// Wenn die native Synthese scheitert (manche Android-WebViews), API-Fallback versuchen.
 		if (event && event.error && event.error !== 'canceled' && event.error !== 'interrupted') {
-			speakViaApi(text, langCode, { onStart, onEnd, onError });
+			speakViaApi(text, langCode, {
+				onStart: safeOnStart,
+				onEnd: safeOnEnd,
+				onError: safeOnError,
+			});
 			return;
 		}
-		onEnd && onEnd();
+		safeOnEnd();
 	};
 
 	// iOS Safari: resume() falls die Queue pausiert ist, sonst bleibt speak() stumm.

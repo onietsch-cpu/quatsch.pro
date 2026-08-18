@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import LanguageSelector from '@/components/LanguageSelector';
-import DialogView from '@/components/DialogView';
+import ConversationView from '@/components/ConversationView';
 import { getLanguageByCode } from '@/lib/languages';
 import { stopSpeaking } from '@/lib/speech';
 
@@ -63,7 +63,7 @@ export default function ConversationPage() {
 				<title>CE Translator – Conversation</title>
 				<meta
 					name="description"
-					content="Conversation between two people: CE Translator automatically alternates translation between both languages."
+					content="Manual conversation between two people: each translation direction starts only after an explicit button press, with no round limit."
 				/>
 			</Helmet>
 
@@ -75,9 +75,8 @@ export default function ConversationPage() {
 				/>
 			)}
 			{stage === 'dialog' && session && (
-				<DialogView
+				<ConversationView
 					key={`${session.langACode}-${session.langBCode}`}
-					mode="dialog"
 					langACode={session.langACode}
 					langBCode={session.langBCode}
 					onEndDialog={handleEndDialog}

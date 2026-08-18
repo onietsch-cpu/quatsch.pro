@@ -1,6 +1,6 @@
 import { fetchWithRetry } from '@/lib/apiHealth';
 
-const MAX_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_SIZE_BYTES = 8 * 1024 * 1024;
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 export function validateImageFile(file) {
@@ -8,7 +8,7 @@ export function validateImageFile(file) {
 		throw Object.assign(new Error('Only JPG, PNG, and WebP images are allowed.'), { code: 'invalid-type' });
 	}
 	if (file.size > MAX_SIZE_BYTES) {
-		throw Object.assign(new Error('Image must be smaller than 5 MB.'), { code: 'too-large' });
+		throw Object.assign(new Error('Image must be smaller than 8 MB.'), { code: 'too-large' });
 	}
 }
 

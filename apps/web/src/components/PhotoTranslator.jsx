@@ -1,5 +1,5 @@
-import { useCallback, useRef, useState } from 'react';
-import { Camera, Upload, Loader2, X, Copy, Share2, Volume2, AlertTriangle, ImageIcon } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Camera, Upload, Loader2, X, Copy, Share2, Volume2, AlertTriangle, ImageIcon, RotateCw } from 'lucide-react';
 import { translateImage } from '@/lib/translateImageClient';
 import { speak, stopSpeaking } from '@/lib/speech';
 
@@ -14,53 +14,96 @@ export default function PhotoTranslator({ targetCode, targetName, settings }) {
 	const cameraRef = useRef(null);
 	const currentFileRef = useRef(null);
 	const honeypotRef = useRef(null);
+	const previewRef = useRef(null);
+	// Race-Condition-Schutz: nur das Ergebnis der neuesten Anfrage wird angezeigt.
+	const requestIdRef = useRef(0);
 
-	const handleFile = useCallback(
-		async (file) => {
+	// Jede neue Eingabe (Upload/Kamera) startet OCR + Übersetzung vollständig neu.
+	const runImageTranslation = useCallback(
+		async (file, { keepPreview = false } = {}) => {
 			if (!file) return;
-			setError(null);
-			setResult(null);
-			setCopied(false);
 
-			// Revoke old preview
-			if (preview) URL.revokeObjectURL(preview);
-			const url = URL.createObjectURL(file);
-			setPreview(url);
+			const myId = (requestIdRef.current += 1);
+			setError(null);
+			setCopied(false);
+			setResult(null); // veraltete Ergebnisse sofort verwerfen
+
+			if (!keepPreview) {
+				if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+				const url = URL.createObjectURL(file);
+				previewRef.current = url;
+				setPreview(url);
+			}
 			currentFileRef.current = file;
 
 			setIsTranslating(true);
+			stopSpeaking();
+
 			try {
-				const data = await translateImage({ file, targetLanguageName: targetName, honeypot: honeypotRef.current?.value ?? '' });
+				const data = await translateImage({
+					file,
+					targetLanguageName: targetName,
+					honeypot: honeypotRef.current?.value ?? '',
+				});
+
+				// Veraltete Antwort verwerfen – niemals neuere Ergebnisse überschreiben.
+				if (requestIdRef.current !== myId) return;
+
 				setResult(data);
 				if (settings?.autoRead && data.translation) {
-					stopSpeaking();
 					speak(data.translation, targetCode, { rateMultiplier: settings.rate ?? 1 });
 				}
 			} catch (err) {
+				if (requestIdRef.current !== myId) return;
 				if (err.code === 'invalid-type') {
 					setError('Only JPG, PNG, and WebP images are allowed.');
 				} else if (err.code === 'too-large') {
-					setError('The image is too large. Please use an image smaller than 5 MB.');
+					setError('The image is too large. Please use an image smaller than 8 MB.');
 				} else if (err.code === 'validation') {
 					setError(err.message || 'Invalid image.');
 				} else {
 					setError('The image could not be translated. Please try again.');
 				}
 			} finally {
-				setIsTranslating(false);
+				if (requestIdRef.current === myId) {
+					setIsTranslating(false);
+				}
 			}
 		},
-		[preview, targetName, targetCode, settings],
+		[targetName, targetCode, settings],
 	);
 
 	const onFileChange = (e) => {
 		const file = e.target.files?.[0];
 		e.target.value = '';
-		if (file) handleFile(file);
+		if (file) runImageTranslation(file, { keepPreview: false });
 	};
 
+	// Bei Wechsel der Zielsprache das aktuell vorliegende Foto erneut übersetzen.
+	useEffect(() => {
+		if (currentFileRef.current) {
+			runImageTranslation(currentFileRef.current, { keepPreview: true });
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [targetCode, targetName]);
+
+	useEffect(
+		() => () => {
+			requestIdRef.current += 1;
+			if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+		},
+		[],
+	);
+
+	const handleRetry = useCallback(() => {
+		if (currentFileRef.current) {
+			runImageTranslation(currentFileRef.current, { keepPreview: true });
+		}
+	}, [runImageTranslation]);
+
 	const handleClear = () => {
-		if (preview) URL.revokeObjectURL(preview);
+		if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+		previewRef.current = null;
 		setPreview(null);
 		setResult(null);
 		setError(null);
@@ -174,12 +217,23 @@ export default function PhotoTranslator({ targetCode, targetName, settings }) {
 
 			{/* Error */}
 			{error && (
-				<div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-					<AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-					<span className="flex-1">{error}</span>
-					<button onClick={() => setError(null)} className="text-amber-500 hover:text-amber-700">
-						<X className="h-4 w-4" />
-					</button>
+				<div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+					<div className="flex items-start gap-2">
+						<AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+						<span className="flex-1">{error}</span>
+						<button onClick={() => setError(null)} className="text-amber-500 hover:text-amber-700">
+							<X className="h-4 w-4" />
+						</button>
+					</div>
+					{currentFileRef.current && (
+						<button
+							onClick={handleRetry}
+							className="inline-flex items-center justify-center gap-1.5 self-start rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-700 active:scale-[0.98]"
+						>
+							<RotateCw className="h-4 w-4" />
+							Try again
+						</button>
+					)}
 				</div>
 			)}
 
