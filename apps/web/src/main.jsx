@@ -2,7 +2,14 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from '@/App';
 import '@/index.css';
+// Attach the beforeinstallprompt listener as early as possible so the event
+// is never missed while the app finishes mounting.
 import '@/lib/pwaInstall';
+
+if ('scrollRestoration' in window.history) {
+	window.history.scrollRestoration = 'manual';
+}
+window.scrollTo(0, 0);
 
 ReactDOM.createRoot(document.getElementById('root')).render(
 	<App />

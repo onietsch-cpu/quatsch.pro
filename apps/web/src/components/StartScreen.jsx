@@ -5,11 +5,7 @@ import InstallButton from '@/components/InstallButton';
 import { ackPrivacy, hasAckedPrivacy } from '@/lib/storage';
 
 const SPONSORS = [
-	{
-		name: 'deutschland.money',
-		subtitle: 'Dachportal für Immobilien, Finanzen und Firmengründung',
-		url: 'https://deutschland.money',
-	},
+	{ name: 'deutschland.money', subtitle: 'Dachportal für Immobilien, Finanzen und Firmengründung', url: 'https://deutschland.money' },
 	{ name: 'cashanlage.de', subtitle: 'Kapitalanlagen', url: 'https://cashanlage.de' },
 	{ name: 'ihr-makler24.de', subtitle: 'Ihr Immobilienbüro', url: 'https://ihr-makler24.de' },
 	{ name: 'finanzierungspilot.de', subtitle: 'Baufinanzierung', url: 'https://finanzierungspilot.de' },
@@ -24,7 +20,7 @@ export default function StartScreen({ onStart }) {
 	}, []);
 
 	return (
-		<div className="flex min-h-[100dvh] flex-col items-center justify-center bg-gradient-to-b from-[#EAF2FB] via-white to-[#EAF2FB] px-6 py-16">
+		<div className="flex min-h-[100dvh] flex-col items-center justify-start bg-gradient-to-b from-[#EAF2FB] via-white to-[#EAF2FB] px-6 pb-16 pt-10 sm:pt-12">
 			<motion.div
 				initial={{ opacity: 0, y: 24 }}
 				animate={{ opacity: 1, y: 0 }}
@@ -33,9 +29,11 @@ export default function StartScreen({ onStart }) {
 			>
 				<div className="mx-auto mb-8">
 					<img
-						src="/ce-translator-logo.png"
+						src="/ce-translator-logo-2026.png"
 						alt="CE Translator Logo"
-						className="mx-auto h-24 w-24"
+						width="202"
+						height="168"
+						className="mx-auto h-auto w-40 max-w-full"
 					/>
 				</div>
 
