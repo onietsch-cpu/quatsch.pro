@@ -5,11 +5,15 @@ import InstallButton from '@/components/InstallButton';
 import { ackPrivacy, hasAckedPrivacy } from '@/lib/storage';
 
 const SPONSORS = [
+	{
+		name: 'deutschland.money',
+		subtitle: 'Dachportal für Immobilien, Finanzen und Firmengründung',
+		url: 'https://deutschland.money',
+	},
 	{ name: 'cashanlage.de', subtitle: 'Kapitalanlagen', url: 'https://cashanlage.de' },
 	{ name: 'ihr-makler24.de', subtitle: 'Ihr Immobilienbüro', url: 'https://ihr-makler24.de' },
 	{ name: 'finanzierungspilot.de', subtitle: 'Baufinanzierung', url: 'https://finanzierungspilot.de' },
 	{ name: 'muh.bet', subtitle: 'Kostenloser Auswanderungsleitfaden', url: 'https://muh.bet' },
-	{ name: 'vordiagnose.com', subtitle: 'Clinical pre-diagnosis, structured and safe', url: 'https://vordiagnose.com' },
 ];
 
 export default function StartScreen({ onStart }) {
