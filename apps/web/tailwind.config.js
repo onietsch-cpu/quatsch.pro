@@ -1,11 +1,17 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import tailwindcssAnimate from 'tailwindcss-animate';
+
+const directory = path.dirname(fileURLToPath(import.meta.url));
+
 /** @type {import('tailwindcss').Config} */
-module.exports = {
+export default {
 	darkMode: ['class'],
 	content: [
-		'./pages/**/*.{js,jsx}',
-		'./components/**/*.{js,jsx}',
-		'./app/**/*.{js,jsx}',
-		'./src/**/*.{js,jsx}',
+		path.join(directory, 'pages/**/*.{js,jsx}'),
+		path.join(directory, 'components/**/*.{js,jsx}'),
+		path.join(directory, 'app/**/*.{js,jsx}'),
+		path.join(directory, 'src/**/*.{js,jsx}'),
 	],
 	theme: {
 		container: {
@@ -51,14 +57,14 @@ module.exports = {
 					foreground: 'hsl(var(--card-foreground))',
 				},
 				sidebar: {
-					'DEFAULT': 'hsl(var(--sidebar-background))',
-					'foreground': 'hsl(var(--sidebar-foreground))',
-					'primary': 'hsl(var(--sidebar-primary))',
+					DEFAULT: 'hsl(var(--sidebar-background))',
+					foreground: 'hsl(var(--sidebar-foreground))',
+					primary: 'hsl(var(--sidebar-primary))',
 					'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
-					'accent': 'hsl(var(--sidebar-accent))',
+					accent: 'hsl(var(--sidebar-accent))',
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
-					'border': 'hsl(var(--sidebar-border))',
-					'ring': 'hsl(var(--sidebar-ring))',
+					border: 'hsl(var(--sidebar-border))',
+					ring: 'hsl(var(--sidebar-ring))',
 				},
 			},
 			borderRadius: {
@@ -90,5 +96,5 @@ module.exports = {
 			},
 		},
 	},
-	plugins: [require('tailwindcss-animate')],
+	plugins: [tailwindcssAnimate],
 };
