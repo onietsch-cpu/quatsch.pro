@@ -8,14 +8,10 @@ const workerSource = await readFile(new URL('../public/sw.js', import.meta.url),
 function createWorker({ cacheNames = [] } = {}) {
 	const listeners = new Map();
 	const deleted = [];
-	const navigated = [];
 	let claimed = 0;
+	let matchedClients = 0;
 	let skipped = 0;
 	let unregistered = 0;
-	const windows = [
-		{ url: 'https://quatsch.pro/', navigate: async (url) => navigated.push(url) },
-		{ url: 'https://quatsch.pro/settings', navigate: async (url) => navigated.push(url) },
-	];
 
 	const context = {
 		caches: {
@@ -30,7 +26,10 @@ function createWorker({ cacheNames = [] } = {}) {
 				claim: async () => {
 					claimed += 1;
 				},
-				matchAll: async () => windows,
+				matchAll: async () => {
+					matchedClients += 1;
+					return [];
+				},
 			},
 			registration: {
 				unregister: async () => {
@@ -50,7 +49,7 @@ function createWorker({ cacheNames = [] } = {}) {
 		claimed: () => claimed,
 		deleted,
 		listeners,
-		navigated,
+		matchedClients: () => matchedClients,
 		skipped: () => skipped,
 		unregistered: () => unregistered,
 	};
@@ -68,7 +67,7 @@ test('install activates the recovery worker immediately', async () => {
 	assert.equal(worker.skipped(), 1);
 });
 
-test('activate removes translator caches, unregisters, and reloads open clients', async () => {
+test('activate removes translator caches and unregisters without touching clients', async () => {
 	const worker = createWorker({
 		cacheNames: [
 			'ce-translator-shell-v1',
@@ -82,12 +81,9 @@ test('activate removes translator caches, unregisters, and reloads open clients'
 		'ce-translator-shell-v1',
 		'ce-translator-static-v1',
 	]);
-	assert.equal(worker.claimed(), 1);
+	assert.equal(worker.claimed(), 0);
+	assert.equal(worker.matchedClients(), 0);
 	assert.equal(worker.unregistered(), 1);
-	assert.deepEqual(worker.navigated, [
-		'https://quatsch.pro/',
-		'https://quatsch.pro/settings',
-	]);
 });
 
 test('recovery worker does not intercept requests', () => {
