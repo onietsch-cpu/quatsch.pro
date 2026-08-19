@@ -1,60 +1,71 @@
-// CE Translator service worker – caches the app shell only.
-// Translations always require network access and are never cached.
+// CE Translator service worker - caches same-origin static assets only.
+// HTML navigations and API requests always bypass the service worker.
 
-const CACHE_NAME = 'ce-translator-shell-v1';
-const APP_SHELL = ['/', '/manifest.webmanifest'];
+const CACHE_NAME = 'ce-translator-static-v1';
+const LEGACY_CACHE_PREFIX = 'ce-translator-shell-';
+const STATIC_DESTINATIONS = new Set(['font', 'image', 'manifest', 'script', 'style']);
 
 self.addEventListener('install', (event) => {
-	event.waitUntil(
-		caches
-			.open(CACHE_NAME)
-			.then((cache) => cache.addAll(APP_SHELL))
-			.catch(() => {})
-			.then(() => self.skipWaiting()),
-	);
+	event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener('activate', (event) => {
 	event.waitUntil(
-		caches
-			.keys()
-			.then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
-			.then(() => self.clients.claim()),
+		(async () => {
+			const keys = await caches.keys();
+			await Promise.all(
+				keys
+					.filter(
+						(key) =>
+							key.startsWith(LEGACY_CACHE_PREFIX) ||
+							(key.startsWith('ce-translator-static-') && key !== CACHE_NAME),
+					)
+					.map((key) => caches.delete(key)),
+			);
+			await self.clients.claim();
+		})(),
 	);
 });
 
 self.addEventListener('fetch', (event) => {
 	const { request } = event;
-	if (request.method !== 'GET') return;
+
+	if (
+		request.method !== 'GET' ||
+		request.mode === 'navigate' ||
+		request.destination === 'document' ||
+		request.headers.get('accept')?.includes('text/html')
+	) {
+		return;
+	}
 
 	const url = new URL(request.url);
-
-	// Never cache API / backend calls – translations need a live network.
-	if (url.pathname.startsWith('/hcgi/') || url.pathname.startsWith('/api/')) {
+	if (
+		url.origin !== self.location.origin ||
+		url.pathname.startsWith('/hcgi/') ||
+		url.pathname.startsWith('/api/') ||
+		!STATIC_DESTINATIONS.has(request.destination)
+	) {
 		return;
 	}
 
-	// Navigation requests: try network first, fall back to cached shell offline.
-	if (request.mode === 'navigate') {
-		event.respondWith(
-			fetch(request).catch(() => caches.match('/').then((res) => res || caches.match(request))),
-		);
-		return;
-	}
-
-	// Static assets: cache-first, then network, updating the cache in the background.
 	event.respondWith(
-		caches.match(request).then((cached) => {
-			const networkFetch = fetch(request)
-				.then((response) => {
-					if (response && response.ok) {
-						const clone = response.clone();
-						caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-					}
-					return response;
-				})
-				.catch(() => cached);
-			return cached || networkFetch;
-		}),
+		(async () => {
+			try {
+				const response = await fetch(request);
+				const contentType = response.headers.get('content-type') || '';
+
+				if (response.ok && response.type === 'basic' && !contentType.includes('text/html')) {
+					const cache = await caches.open(CACHE_NAME);
+					await cache.put(request, response.clone());
+				}
+
+				return response;
+			} catch (error) {
+				const cached = await caches.match(request);
+				if (cached) return cached;
+				throw error;
+			}
+		})(),
 	);
 });
