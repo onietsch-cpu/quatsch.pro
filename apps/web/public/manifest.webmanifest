@@ -15,16 +15,10 @@
   "categories": ["utilities", "productivity", "travel"],
   "icons": [
     {
-      "src": "https://images.hostinger.com/ec22ec56-f0d0-429a-aae5-98eaa52df2ec.png",
-      "sizes": "192x192 512x512 1024x1024",
+      "src": "/ce-translator-logo.png",
+      "sizes": "202x168",
       "type": "image/png",
       "purpose": "any"
-    },
-    {
-      "src": "https://images.hostinger.com/ec22ec56-f0d0-429a-aae5-98eaa52df2ec.png",
-      "sizes": "192x192 512x512 1024x1024",
-      "type": "image/png",
-      "purpose": "maskable"
     }
   ]
 }

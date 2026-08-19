@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, ShieldCheck, ExternalLink, Languages } from 'lucide-react';
+import { ArrowRight, ShieldCheck, ExternalLink } from 'lucide-react';
 import InstallButton from '@/components/InstallButton';
 import { ackPrivacy, hasAckedPrivacy } from '@/lib/storage';
 
@@ -27,8 +27,12 @@ export default function StartScreen({ onStart }) {
 				transition={{ duration: 0.6, ease: 'easeOut' }}
 				className="w-full max-w-md text-center"
 			>
-				<div className="mx-auto mb-8 flex h-24 w-24 items-center justify-center rounded-2xl bg-[#1976D2] text-white shadow-lg shadow-[#1976D2]/20" aria-hidden="true">
-					<Languages className="h-12 w-12" strokeWidth={1.8} />
+				<div className="mx-auto mb-8">
+					<img
+						src="/ce-translator-logo.png"
+						alt="CE Translator Logo"
+						className="mx-auto h-24 w-24"
+					/>
 				</div>
 
 				<h1 className="text-3xl font-extrabold tracking-tight text-[#0B1F3A] sm:text-4xl">
