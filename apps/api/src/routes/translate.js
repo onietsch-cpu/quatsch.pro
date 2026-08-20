@@ -3,15 +3,14 @@ import { generateJson } from '../services/ai-provider.js';
 
 const MAX_TEXT_LENGTH = 5000;
 
-const SYSTEM_PROMPT = `You are a precise, professional translation engine. Your only job is to translate text into the requested target language.
+const SYSTEM_PROMPT = `You are a fast, precise translation engine. Translate the complete input naturally into the requested target language.
 
 Rules:
 1. Detect the source language automatically.
-2. Translate the entire source text faithfully and naturally into the requested target language.
-3. The "translation" field must be written in the requested target language, never another language.
-4. If the source text is already in the target language, return it unchanged.
-5. Report the language actually used in "translation" as "translatedLanguageCode".
-6. Return only compact JSON with this exact shape: {"detectedLanguageName":"English language name","detectedLanguageCode":"BCP-47 code","translatedLanguageCode":"BCP-47 code","translation":"translated text"}.`;
+2. For an input made only of a number, write the number out fully in words in the target language. Never return only the original digits.
+3. If non-numeric text is already in the target language, return it unchanged.
+4. Report the language actually used in "translation" as "translatedLanguageCode".
+5. Return only compact JSON with this exact shape: {"detectedLanguageName":"English language name","detectedLanguageCode":"BCP-47 code","translatedLanguageCode":"BCP-47 code","translation":"translated text"}.`;
 
 function baseLanguage(code) {
 	return String(code || '').trim().toLowerCase().split(/[-_]/)[0];
@@ -25,6 +24,11 @@ function normalizeComparableText(value) {
 		.trim();
 }
 
+export function isNumericOnlyText(value) {
+	const text = String(value || '').trim();
+	return /\p{N}/u.test(text) && /^[\p{N}\p{P}\p{S}\s]+$/u.test(text);
+}
+
 export function isValidTranslation(result, sourceText, targetLanguageCode) {
 	if (!result || typeof result.translation !== 'string' || !result.translation.trim()) return false;
 
@@ -32,19 +36,24 @@ export function isValidTranslation(result, sourceText, targetLanguageCode) {
 	const translatedBase = baseLanguage(result.translatedLanguageCode);
 	if (targetBase && translatedBase !== targetBase) return false;
 
-	const sourceBase = baseLanguage(result.detectedLanguageCode);
 	const unchanged = normalizeComparableText(result.translation) === normalizeComparableText(sourceText);
+	if (unchanged && isNumericOnlyText(sourceText)) return false;
+
+	const sourceBase = baseLanguage(result.detectedLanguageCode);
 	return !unchanged || !targetBase || sourceBase === targetBase;
 }
 
 async function requestTranslation({ text, targetLanguageName, targetLanguageCode, correction = false }) {
+	const numericInstruction = isNumericOnlyText(text)
+		? ' The source is numeric-only: spell out its complete value in target-language words; do not return the digits unchanged.'
+		: '';
 	const correctionPrompt = correction
-		? '\n\nYour previous answer was invalid because it copied the source or used the wrong output language. Translate it again, verify the actual output language, and return the required JSON.'
+		? '\n\nThe previous answer was invalid. Correct the output language and do not copy the source. For numeric-only input, return target-language number words.'
 		: '';
 
 	return generateJson({
 		systemPrompt: SYSTEM_PROMPT,
-		userPrompt: `Target language: ${targetLanguageName} (${targetLanguageCode || 'target locale unspecified'}). The "translation" field must be entirely in that language, and "translatedLanguageCode" must identify the language actually used.${correctionPrompt}\n\nSource text:\n${text}`,
+		userPrompt: `Target: ${targetLanguageName} (${targetLanguageCode || 'locale unspecified'}).${numericInstruction}${correctionPrompt}\n\nSource:\n${text}`,
 	});
 }
 
@@ -74,12 +83,7 @@ export default async (req, res) => {
 
 	if (!isValidTranslation(result, sourceText, targetLanguageCode)) {
 		logger.warn(`translate: invalid output, retrying target="${targetLanguageCode || targetLanguageName}" ip=${ip}`);
-		result = await requestTranslation({
-			text: sourceText,
-			targetLanguageName,
-			targetLanguageCode,
-			correction: true,
-		});
+		result = await requestTranslation({ text: sourceText, targetLanguageName, targetLanguageCode, correction: true });
 	}
 
 	if (!isValidTranslation(result, sourceText, targetLanguageCode)) {
