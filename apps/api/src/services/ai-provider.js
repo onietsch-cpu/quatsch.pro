@@ -128,6 +128,7 @@ export async function generateJson({ systemPrompt, userPrompt, imageDataUrl }) {
 			],
 			response_format: { type: 'json_object' },
 			temperature: 0,
+			max_tokens: 300,
 		}),
 	});
 
