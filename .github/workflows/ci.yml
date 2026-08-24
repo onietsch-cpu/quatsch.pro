@@ -22,3 +22,44 @@ jobs:
       - run: npm audit --omit=dev --audit-level=high
       - run: npm run check
       - run: docker build -t quatsch-pro:${{ github.sha }} .
+
+  worldwide-lead-research:
+    if: github.event_name == 'pull_request' && github.head_ref == 'lead-research-20260824'
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - name: Check out research branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade requests dnspython
+
+      - name: Restore and validate research script
+        run: |
+          base64 --decode lead_research.py.gz.b64 | gzip --decompress > lead_research.py
+          python -m py_compile lead_research.py
+
+      - name: Collect and validate 10,000 public business contacts
+        run: python lead_research.py --target 10000 --output output
+
+      - name: Package results
+        if: always()
+        run: |
+          mkdir -p artifact
+          cp -r output/. artifact/ 2>/dev/null || true
+          cp lead_research.py artifact/
+          printf '%s\n' "Generated from public business listings. Review every source before outreach." > artifact/LEGAL_AND_QUALITY_NOTICE.txt
+
+      - name: Upload research result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: worldwide-sme-app-leads-10000
+          path: artifact
+          if-no-files-found: error
+          retention-days: 7
