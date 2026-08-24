@@ -1,0 +1,60 @@
+name: Geofabrik Lead Density Diagnostic
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/geofabrik-density.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Install osmium
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq osmium-tool
+
+      - name: Measure regional email-tagged businesses
+        run: |
+          set -euo pipefail
+          regions=(
+            'GB|Greater London|https://download.geofabrik.de/europe/united-kingdom/england/greater-london-latest.osm.pbf'
+            'US|Delaware|https://download.geofabrik.de/north-america/us/delaware-latest.osm.pbf'
+            'CA|Nova Scotia|https://download.geofabrik.de/north-america/canada/nova-scotia-latest.osm.pbf'
+            'DE|Saarland|https://download.geofabrik.de/europe/germany/saarland-latest.osm.pbf'
+          )
+          for item in "${regions[@]}"; do
+            IFS='|' read -r code label url <<< "$item"
+            echo "REGION_START $code $label $url"
+            rm -f region.osm.pbf email-objects.osm.pbf email-objects.geojsonseq
+            curl -L --fail --retry 3 -o region.osm.pbf "$url"
+            bytes=$(stat -c%s region.osm.pbf)
+            osmium tags-filter region.osm.pbf \
+              n/contact:email n/email w/contact:email w/email r/contact:email r/email \
+              -o email-objects.osm.pbf --overwrite
+            osmium export email-objects.osm.pbf -f geojsonseq --add-unique-id=type_id -o email-objects.geojsonseq --overwrite
+            CODE="$code" LABEL="$label" BYTES="$bytes" python - <<'PY'
+          import json, os
+          total=0; email_features=0; named=0; customerish=0
+          keys={'amenity','shop','office','craft','tourism','leisure','healthcare','sport','club'}
+          with open('email-objects.geojsonseq','r',encoding='utf-8') as f:
+              for line in f:
+                  line=line.lstrip('\x1e').strip()
+                  if not line: continue
+                  total += 1
+                  obj=json.loads(line)
+                  p=obj.get('properties') or {}
+                  if p.get('email') or p.get('contact:email'):
+                      email_features += 1
+                      if p.get('name'):
+                          named += 1
+                          if any(p.get(k) for k in keys): customerish += 1
+          print('REGION_RESULT',os.environ['CODE'],os.environ['LABEL'],'bytes',os.environ['BYTES'],'total',total,'email',email_features,'named',named,'customerish',customerish)
+          PY
+          done
