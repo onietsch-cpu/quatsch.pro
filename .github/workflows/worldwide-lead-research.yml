@@ -6,8 +6,12 @@ on:
       - main
     paths:
       - '.github/workflows/worldwide-lead-research.yml'
-      - 'lead_research.py.gz.b64'
+      - 'geofabrik_lead_research.py.gz.b64'
   workflow_dispatch:
+
+concurrency:
+  group: worldwide-sme-app-lead-research
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -25,24 +29,27 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
-        run: python -m pip install --upgrade requests dnspython
+      - name: Install system and Python dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq osmium-tool
+          python -m pip install --upgrade requests dnspython
 
       - name: Restore research script
-        run: base64 --decode lead_research.py.gz.b64 | gzip --decompress > lead_research.py
+        run: base64 --decode geofabrik_lead_research.py.gz.b64 | gzip --decompress > geofabrik_lead_research.py
 
       - name: Validate script
-        run: python -m py_compile lead_research.py
+        run: python -m py_compile geofabrik_lead_research.py
 
-      - name: Collect and validate public business contacts
-        run: python lead_research.py --target 10000 --output output
+      - name: Collect and validate 10,000 public business contacts
+        run: python geofabrik_lead_research.py --target 10000 --output output
 
       - name: Package result
         if: always()
         run: |
           mkdir -p artifact
           cp -r output/. artifact/ 2>/dev/null || true
-          cp lead_research.py artifact/
+          cp geofabrik_lead_research.py artifact/
           printf '%s\n' "Public business contacts only. Recheck every source before outreach." > artifact/LEGAL_AND_QUALITY_NOTICE.txt
 
       - name: Upload result
