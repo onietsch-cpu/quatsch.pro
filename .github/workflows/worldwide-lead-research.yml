@@ -1,0 +1,55 @@
+name: Worldwide SME App Lead Research
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/worldwide-lead-research.yml'
+      - 'lead_research.py.gz.b64'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - name: Check out research branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade requests dnspython
+
+      - name: Restore research script
+        run: base64 --decode lead_research.py.gz.b64 | gzip --decompress > lead_research.py
+
+      - name: Validate script
+        run: python -m py_compile lead_research.py
+
+      - name: Collect and validate public business contacts
+        run: python lead_research.py --target 10000 --output output
+
+      - name: Package result
+        if: always()
+        run: |
+          mkdir -p artifact
+          cp -r output/. artifact/ 2>/dev/null || true
+          cp lead_research.py artifact/
+          printf '%s\n' "Public business contacts only. Recheck every source before outreach." > artifact/LEGAL_AND_QUALITY_NOTICE.txt
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: worldwide-sme-app-leads-10000
+          path: artifact
+          if-no-files-found: error
+          retention-days: 7
