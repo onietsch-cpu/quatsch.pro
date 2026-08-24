@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/worldwide-lead-research.yml'
       - 'geofabrik_lead_research.py.gz.b64'
+      - 'geofabrik_v2.patch'
   workflow_dispatch:
 
 concurrency:
@@ -35,8 +36,10 @@ jobs:
           sudo apt-get install -y -qq osmium-tool
           python -m pip install --upgrade requests dnspython
 
-      - name: Restore research script
-        run: base64 --decode geofabrik_lead_research.py.gz.b64 | gzip --decompress > geofabrik_lead_research.py
+      - name: Restore and apply quality patch
+        run: |
+          base64 --decode geofabrik_lead_research.py.gz.b64 | gzip --decompress > geofabrik_lead_research.py
+          patch --forward geofabrik_lead_research.py < geofabrik_v2.patch
 
       - name: Validate script
         run: python -m py_compile geofabrik_lead_research.py
@@ -56,7 +59,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: worldwide-sme-app-leads-10000
+          name: worldwide-sme-app-leads-10000-v2
           path: artifact
           if-no-files-found: error
           retention-days: 7
