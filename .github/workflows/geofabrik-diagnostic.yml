@@ -24,10 +24,33 @@ jobs:
         run: |
           curl -L --fail --retry 3 -o region.osm.pbf https://download.geofabrik.de/europe/liechtenstein-latest.osm.pbf
           ls -lh region.osm.pbf
+
           osmium tags-filter region.osm.pbf \
             n/contact:email n/email w/contact:email w/email r/contact:email r/email \
             -o email-objects.osm.pbf --overwrite
-          osmium fileinfo -e email-objects.osm.pbf
-          osmium export email-objects.osm.pbf -f geojsonseq -o email-objects.geojsonseq --overwrite
-          echo "EXPORTED_LINES $(wc -l < email-objects.geojsonseq)"
-          head -n 3 email-objects.geojsonseq || true
+          osmium export email-objects.osm.pbf -f geojsonseq --add-unique-id=type_id -o email-objects.geojsonseq --overwrite
+
+          osmium tags-filter region.osm.pbf \
+            n/contact:email n/email -R \
+            -o email-nodes.osm.pbf --overwrite
+          osmium export email-nodes.osm.pbf -f geojsonseq --add-unique-id=type_id -o email-nodes.geojsonseq --overwrite
+
+          python - <<'PY'
+          import json
+          for path in ['email-objects.geojsonseq','email-nodes.geojsonseq']:
+              total=0; email_features=0; named=0
+              examples=[]
+              with open(path,'r',encoding='utf-8') as f:
+                  for line in f:
+                      line=line.lstrip('\x1e').strip()
+                      if not line: continue
+                      total += 1
+                      obj=json.loads(line)
+                      props=obj.get('properties') or {}
+                      if props.get('email') or props.get('contact:email'):
+                          email_features += 1
+                          if props.get('name'): named += 1
+                          if len(examples)<3: examples.append(obj)
+              print('FILE_COUNTS',path,'total',total,'email_features',email_features,'named',named)
+              for ex in examples: print('EXAMPLE',json.dumps(ex,ensure_ascii=False)[:1000])
+          PY
