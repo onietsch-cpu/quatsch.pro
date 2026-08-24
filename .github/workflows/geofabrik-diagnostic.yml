@@ -1,0 +1,33 @@
+name: Geofabrik Lead Extraction Diagnostic
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/geofabrik-diagnostic.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Install osmium
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq osmium-tool
+
+      - name: Download and filter a regional extract
+        run: |
+          curl -L --fail --retry 3 -o region.osm.pbf https://download.geofabrik.de/europe/liechtenstein-latest.osm.pbf
+          ls -lh region.osm.pbf
+          osmium tags-filter region.osm.pbf \
+            n/contact:email n/email w/contact:email w/email r/contact:email r/email \
+            -o email-objects.osm.pbf --overwrite
+          osmium fileinfo -e email-objects.osm.pbf
+          osmium export email-objects.osm.pbf -f geojsonseq -o email-objects.geojsonseq --overwrite
+          echo "EXPORTED_LINES $(wc -l < email-objects.geojsonseq)"
+          head -n 3 email-objects.geojsonseq || true
