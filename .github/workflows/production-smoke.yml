@@ -49,7 +49,7 @@ jobs:
             local url="$1"
             local body="$2"
             local headers="$3"
-            curl --silent --show-error --location \
+            curl --silent --show-error --compressed --location \
               --connect-timeout 10 --max-time 45 \
               --retry 2 --retry-all-errors --retry-delay 2 \
               --user-agent "quatsch.pro-production-smoke/1.0" \
@@ -83,7 +83,7 @@ jobs:
             jq -e '.error == "Not found" and (keys == ["error"])' "$workdir/not-found-body" >/dev/null
           done
 
-          translate_status="$(curl --silent --show-error \
+          translate_status="$(curl --silent --show-error --compressed \
             --connect-timeout 10 --max-time 60 \
             --user-agent "quatsch.pro-production-smoke/1.0" \
             --header "Content-Type: application/json" \
@@ -102,7 +102,7 @@ jobs:
           translate_request_id="$(header_value x-request-id "$workdir/translate-headers")"
           echo "PASS translation payload${translate_request_id:+, request $translate_request_id}"
 
-          tts_status="$(curl --silent --show-error \
+          tts_status="$(curl --silent --show-error --compressed \
             --connect-timeout 10 --max-time 60 \
             --user-agent "quatsch.pro-production-smoke/1.0" \
             --header "Content-Type: application/json" \
