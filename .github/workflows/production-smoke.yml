@@ -16,8 +16,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.deployment_status.state == 'success' &&
-       github.actor == 'railway-app[bot]' &&
-       github.ref == 'refs/heads/main')
+       github.actor == 'railway-app[bot]')
     name: verify production
     runs-on: ubuntu-latest
     timeout-minutes: 8
