@@ -26,6 +26,7 @@ jobs:
           set -euo pipefail
 
           workdir="$(mktemp -d)"
+          service_url="https://quatschpro-production.up.railway.app"
           trap 'rm -rf "$workdir"' EXIT
 
           header_value() {
@@ -67,16 +68,16 @@ jobs:
             (( root_bytes > 500 )) || { echo "FAIL https://$domain/: HTML response is unexpectedly small ($root_bytes bytes)" >&2; exit 1; }
           done
 
-          status="$(get_request "https://www.quatsch.pro/healthz" "$workdir/health-body" "$workdir/health-headers")"
+          status="$(get_request "$service_url/healthz" "$workdir/health-body" "$workdir/health-headers")"
           assert_status "$status" "200" "/healthz"
           # Railway uses /healthz for liveness. The public API health route below validates the JSON contract.
 
-          status="$(get_request "https://www.quatsch.pro/hcgi/api/health" "$workdir/api-health-body" "$workdir/api-health-headers")"
+          status="$(get_request "$service_url/hcgi/api/health" "$workdir/api-health-body" "$workdir/api-health-headers")"
           assert_status "$status" "200" "/hcgi/api/health"
           jq -e '.status == "ok" and .aiProviderConfigured == true' "$workdir/api-health-body" >/dev/null
 
           for path in /.env /.git/config /wp-admin/install.php; do
-            status="$(get_request "https://www.quatsch.pro$path" "$workdir/not-found-body" "$workdir/not-found-headers")"
+            status="$(get_request "$service_url$path" "$workdir/not-found-body" "$workdir/not-found-headers")"
             assert_status "$status" "404" "$path"
             content_type="$(header_value content-type "$workdir/not-found-headers")"
             [[ "$content_type" == application/json* ]] || { echo "FAIL $path: unexpected Content-Type $content_type" >&2; exit 1; }
@@ -92,7 +93,7 @@ jobs:
             --data-binary '{"text":"Abschliessender Produktions-Funktionstest.","targetLanguageName":"English","targetLanguageCode":"en-US"}' \
             --dump-header "$workdir/translate-headers" --output "$workdir/translate-body" \
             --write-out "%{http_code}" \
-            "https://www.quatsch.pro/hcgi/api/translate")"
+            "$service_url/hcgi/api/translate")"
           assert_status "$translate_status" "200" "/hcgi/api/translate"
           jq -e '
             (.translation | type == "string" and length > 0) and
@@ -111,7 +112,7 @@ jobs:
             --data-binary '{"text":"Final production test successful.","langCode":"en-US"}' \
             --dump-header "$workdir/tts-headers" --output "$workdir/tts-audio" \
             --write-out "%{http_code}" \
-            "https://www.quatsch.pro/hcgi/api/tts")"
+            "$service_url/hcgi/api/tts")"
           assert_status "$tts_status" "200" "/hcgi/api/tts"
           tts_content_type="$(header_value content-type "$workdir/tts-headers")"
           [[ "$tts_content_type" == audio/mpeg* ]] || { echo "FAIL TTS: unexpected Content-Type $tts_content_type" >&2; exit 1; }
