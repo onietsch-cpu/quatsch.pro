@@ -1,0 +1,129 @@
+name: Production smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/production-smoke.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: verify production
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Test public production
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+
+          header_value() {
+            local name="$1"
+            local file="$2"
+            awk -v name="$name" 'BEGIN { IGNORECASE=1 } $0 ~ "^" name ":" { sub(/^[^:]+:[[:space:]]*/, ""); sub(/\r$/, ""); value=$0 } END { print value }' "$file"
+          }
+
+          assert_status() {
+            local actual="$1"
+            local expected="$2"
+            local label="$3"
+            if [[ "$actual" != "$expected" ]]; then
+              echo "FAIL $label: expected HTTP $expected, got $actual" >&2
+              exit 1
+            fi
+            echo "PASS $label: HTTP $actual"
+          }
+
+          get_request() {
+            local url="$1"
+            local body="$2"
+            local headers="$3"
+            curl --silent --show-error --compressed --location \
+              --connect-timeout 10 --max-time 45 \
+              --retry 2 --retry-all-errors --retry-delay 2 \
+              --user-agent "quatsch.pro-production-smoke/1.0" \
+              --header "Accept: text/html" \
+              --dump-header "$headers" --output "$body" \
+              --write-out "%{http_code}" "$url"
+          }
+
+          for domain in quatsch.pro www.quatsch.pro; do
+            status="$(get_request "https://$domain/" "$workdir/root-body" "$workdir/root-headers")"
+            assert_status "$status" "200" "https://$domain/"
+            content_type="$(header_value content-type "$workdir/root-headers")"
+            [[ "$content_type" == text/html* ]] || { echo "FAIL https://$domain/: unexpected Content-Type $content_type" >&2; exit 1; }
+            root_bytes="$(wc -c < "$workdir/root-body")"
+            (( root_bytes > 500 )) || { echo "FAIL https://$domain/: HTML response is unexpectedly small ($root_bytes bytes)" >&2; exit 1; }
+          done
+
+          status="$(get_request "https://www.quatsch.pro/healthz" "$workdir/health-body" "$workdir/health-headers")"
+          assert_status "$status" "200" "/healthz"
+          # Railway uses /healthz for liveness. The public API health route below validates the JSON contract.
+
+          status="$(get_request "https://www.quatsch.pro/hcgi/api/health" "$workdir/api-health-body" "$workdir/api-health-headers")"
+          assert_status "$status" "200" "/hcgi/api/health"
+          jq -e '.status == "ok" and .aiProviderConfigured == true' "$workdir/api-health-body" >/dev/null
+
+          for path in /.env /.git/config /wp-admin/install.php; do
+            status="$(get_request "https://www.quatsch.pro$path" "$workdir/not-found-body" "$workdir/not-found-headers")"
+            assert_status "$status" "404" "$path"
+            content_type="$(header_value content-type "$workdir/not-found-headers")"
+            [[ "$content_type" == application/json* ]] || { echo "FAIL $path: unexpected Content-Type $content_type" >&2; exit 1; }
+            jq -e '.error == "Not found" and (keys == ["error"])' "$workdir/not-found-body" >/dev/null
+          done
+
+          translate_status="$(curl --silent --show-error --compressed \
+            --connect-timeout 10 --max-time 60 \
+            --user-agent "quatsch.pro-production-smoke/1.0" \
+            --header "Content-Type: application/json" \
+            --header "X-Requested-With: XMLHttpRequest" \
+            --header "Origin: https://www.quatsch.pro" \
+            --data-binary '{"text":"Abschliessender Produktions-Funktionstest.","targetLanguageName":"English","targetLanguageCode":"en-US"}' \
+            --dump-header "$workdir/translate-headers" --output "$workdir/translate-body" \
+            --write-out "%{http_code}" \
+            "https://www.quatsch.pro/hcgi/api/translate")"
+          assert_status "$translate_status" "200" "/hcgi/api/translate"
+          jq -e '
+            (.translation | type == "string" and length > 0) and
+            (.detectedLanguageCode | ascii_downcase | startswith("de")) and
+            (.translatedLanguageCode | ascii_downcase | startswith("en"))
+          ' "$workdir/translate-body" >/dev/null
+          translate_request_id="$(header_value x-request-id "$workdir/translate-headers")"
+          echo "PASS translation payload${translate_request_id:+, request $translate_request_id}"
+
+          tts_status="$(curl --silent --show-error --compressed \
+            --connect-timeout 10 --max-time 60 \
+            --user-agent "quatsch.pro-production-smoke/1.0" \
+            --header "Content-Type: application/json" \
+            --header "X-Requested-With: XMLHttpRequest" \
+            --header "Origin: https://www.quatsch.pro" \
+            --data-binary '{"text":"Final production test successful.","langCode":"en-US"}' \
+            --dump-header "$workdir/tts-headers" --output "$workdir/tts-audio" \
+            --write-out "%{http_code}" \
+            "https://www.quatsch.pro/hcgi/api/tts")"
+          assert_status "$tts_status" "200" "/hcgi/api/tts"
+          tts_content_type="$(header_value content-type "$workdir/tts-headers")"
+          [[ "$tts_content_type" == audio/mpeg* ]] || { echo "FAIL TTS: unexpected Content-Type $tts_content_type" >&2; exit 1; }
+          cache_control="$(header_value cache-control "$workdir/tts-headers")"
+          [[ "$cache_control" == *private* && "$cache_control" == *no-store* ]] || { echo "FAIL TTS: unexpected Cache-Control $cache_control" >&2; exit 1; }
+          audio_bytes="$(wc -c < "$workdir/tts-audio")"
+          (( audio_bytes > 100 )) || { echo "FAIL TTS: audio response is empty" >&2; exit 1; }
+          tts_request_id="$(header_value x-request-id "$workdir/tts-headers")"
+          echo "PASS TTS: $audio_bytes bytes${tts_request_id:+, request $tts_request_id}"
+
+          {
+            echo '### Production smoke test'
+            echo
+            echo 'All public production checks passed: domains, health, hardened 404 routes, translation, and TTS.'
+          } >> "$GITHUB_STEP_SUMMARY"
