@@ -16,6 +16,12 @@ import { isProviderConfigured } from './services/ai-provider.js';
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(currentDirectory, '../../..');
 const webDist = path.join(repositoryRoot, 'dist/apps/web');
+const SPA_ROUTES = new Set(['/', '/conversation', '/history', '/settings']);
+
+export function isSpaRoute(requestPath) {
+	const normalized = requestPath.length > 1 ? requestPath.replace(/\/+$/, '') : requestPath;
+	return SPA_ROUTES.has(normalized);
+}
 
 export function createApp() {
 	const app = express();
@@ -67,7 +73,7 @@ export function createApp() {
 		},
 	}));
 	app.use((req, res, next) => {
-		if (req.method !== 'GET' || !req.accepts('html')) return next();
+		if (req.method !== 'GET' || !req.accepts('html') || !isSpaRoute(req.path)) return next();
 		res.setHeader('Cache-Control', 'no-cache');
 		return res.sendFile(path.join(webDist, 'index.html'));
 	});

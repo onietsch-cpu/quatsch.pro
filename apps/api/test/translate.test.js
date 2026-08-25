@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isNumericOnlyText, isValidTranslation } from '../src/routes/translate.js';
+import { isNumericOnlyText, isValidTranslation, validateTranslation } from '../src/routes/translate.js';
 
 test('accepts a translation reported in the requested language', () => {
 	assert.equal(isValidTranslation({ detectedLanguageCode: 'de', translatedLanguageCode: 'en-US', translation: 'Good morning' }, 'Guten Morgen', 'en'), true);
@@ -36,4 +36,34 @@ test('detects numeric-only input including formatted values', () => {
 test('requires numeric-only input to be written as words', () => {
 	assert.equal(isValidTranslation({ detectedLanguageCode: 'und', translatedLanguageCode: 'de', translation: '2' }, '2', 'de'), false);
 	assert.equal(isValidTranslation({ detectedLanguageCode: 'und', translatedLanguageCode: 'de', translation: 'zwei' }, '2', 'de'), true);
+});
+
+test('classifies invalid translations without including user text', () => {
+	const validation = validateTranslation({
+		detectedLanguageCode: 'de-DE',
+		translatedLanguageCode: 'de',
+		translation: 'Guten Morgen',
+	}, 'Guten Morgen', 'en-US');
+
+	assert.deepEqual(validation, {
+		valid: false,
+		reason: 'target_language_mismatch',
+		expectedLanguageCode: 'en',
+		reportedLanguageCode: 'de',
+		detectedLanguageCode: 'de',
+	});
+	assert.equal(JSON.stringify(validation).includes('Guten Morgen'), false);
+});
+
+test('reports copied and numeric-only output as distinct validation reasons', () => {
+	assert.equal(validateTranslation({
+		detectedLanguageCode: 'de',
+		translatedLanguageCode: 'en',
+		translation: 'Guten Morgen',
+	}, 'Guten Morgen', 'en').reason, 'source_copied');
+	assert.equal(validateTranslation({
+		detectedLanguageCode: 'und',
+		translatedLanguageCode: 'de',
+		translation: '2',
+	}, '2', 'de').reason, 'numeric_source_unchanged');
 });
