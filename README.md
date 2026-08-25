@@ -13,6 +13,12 @@ Mobile-first Web-App fuer Sprach-, Text- und Bilduebersetzung. Der Produktionsbe
 - Lokaler Verlauf, Einstellungen und installierbare PWA
 - Health Checks, Rate Limits, strukturierte Logs und kontrolliertes Herunterfahren
 
+## Produktionspfad
+
+Railway ist der einzige Produktions-, Domain-, Deployment-, Log- und Rollback-Pfad. Vercel ist weder Laufzeitziel noch Preview- oder Fallback-Plattform fuer dieses Repository.
+
+Aenderungen durchlaufen einen Pull Request und GitHub Actions. Nach erfolgreicher CI wird nach `main` gemergt. Railway wartet mit `Wait for CI` auf den erfolgreichen `main`-Check, baut danach den Root-`Dockerfile`, aktiviert die neue Version erst nach erfolgreichem `/healthz`-Check und behaelt die vorherige Version als Rollback-Ziel.
+
 ## Lokal starten
 
 ```bash

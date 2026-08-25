@@ -4,6 +4,19 @@
 
 Ein Railway Persistent Service baut den Root-`Dockerfile` aus GitHub. Der Container liefert Frontend und API auf dem von Railway gesetzten `PORT` aus. Die Anwendung ist stateless: Verlauf und Einstellungen bleiben im Browser, deshalb ist fuer den aktuellen Funktionsumfang weder PocketBase noch Supabase erforderlich.
 
+Railway ist der einzige Produktions-, Domain-, Deployment-, Log- und Rollback-Pfad. Vercel ist nicht Teil der Laufzeit, der Vorschau, des Fallbacks oder der Abnahme. Die produktiven Domains `quatsch.pro` und `www.quatsch.pro` zeigen ausschliesslich auf den Railway-Dienst.
+
+## Deployment-Pipeline
+
+1. Aenderungen auf einem separaten Branch implementieren und durch einen Pull Request pruefen.
+2. GitHub Actions fuehrt Installation, Produktions-Audit, Lint, Tests, Vite-Build und Docker-Build aus.
+3. Nur einen gruenen, konfliktfreien Pull Request nach `main` mergen.
+4. Railway `Wait for CI` wartet auf den erfolgreichen GitHub-Actions-Check des neuen `main`-Commits. Bei fehlgeschlagener CI darf kein Produktionsdeployment starten.
+5. Railway baut den Root-`Dockerfile` und aktiviert das Deployment erst, wenn `/healthz` HTTP 200 liefert.
+6. Danach Domains, Kernfunktionen, HTTP-Logs und Rollback-Bereitschaft pruefen.
+
+GitHub-Statusmeldungen anderer Hosting-Plattformen sind nicht Teil dieser Pipeline und duerfen nicht als erforderliche Merge- oder Deployment-Bedingung konfiguriert werden.
+
 ## Erforderliche Variablen
 
 In Railway unter `Service > Variables` setzen:
@@ -47,6 +60,7 @@ Der Health Check bestaetigt Prozessbereitschaft und zeigt nur an, ob ein Provide
 
 ## Stabilitaet
 
+- Railway `Wait for CI` verhindert Deployments nach fehlgeschlagenen GitHub-Actions-Checks.
 - Railway prueft `/healthz` vor der Aktivierung eines Deployments.
 - Bei Prozessfehlern erfolgen hoechstens zehn kontrollierte Neustarts.
 - Alte und neue Version ueberlappen 20 Sekunden; SIGTERM erhaelt 15 Sekunden Drain-Zeit.
