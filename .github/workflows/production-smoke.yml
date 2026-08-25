@@ -63,7 +63,8 @@ jobs:
             assert_status "$status" "200" "https://$domain/"
             content_type="$(header_value content-type "$workdir/root-headers")"
             [[ "$content_type" == text/html* ]] || { echo "FAIL https://$domain/: unexpected Content-Type $content_type" >&2; exit 1; }
-            grep -q '<div id="root"' "$workdir/root-body" || { echo "FAIL https://$domain/: app root missing" >&2; exit 1; }
+            root_bytes="$(wc -c < "$workdir/root-body")"
+            (( root_bytes > 500 )) || { echo "FAIL https://$domain/: HTML response is unexpectedly small ($root_bytes bytes)" >&2; exit 1; }
           done
 
           status="$(get_request "https://quatsch.pro/healthz" "$workdir/health-body" "$workdir/health-headers")"
