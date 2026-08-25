@@ -2,7 +2,7 @@ name: Production smoke
 
 on:
   push:
-    branches: [main]
+    branches: [main, codex/diagnose-production-smoke]
     paths:
       - .github/workflows/production-smoke.yml
   workflow_dispatch:
@@ -74,6 +74,10 @@ jobs:
 
           status="$(get_request "$service_url/hcgi/api/health" "$workdir/api-health-body" "$workdir/api-health-headers")"
           assert_status "$status" "200" "/hcgi/api/health"
+          echo "DIAG health content-type: $(header_value content-type "$workdir/api-health-headers")"
+          echo "DIAG health bytes: $(wc -c < "$workdir/api-health-body")"
+          echo "DIAG health first 160 bytes (hex):"
+          head -c 160 "$workdir/api-health-body" | od -An -tx1
           jq -e '.status == "ok" and .aiProviderConfigured == true' "$workdir/api-health-body" >/dev/null
 
           for path in /.env /.git/config /wp-admin/install.php; do
