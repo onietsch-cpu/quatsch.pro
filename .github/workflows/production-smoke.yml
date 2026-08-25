@@ -76,6 +76,7 @@ jobs:
           assert_status "$status" "200" "/hcgi/api/health"
           echo "DIAG health content-type: $(header_value content-type "$workdir/api-health-headers")"
           echo "DIAG health bytes: $(wc -c < "$workdir/api-health-body")"
+          echo "DIAG health title: $(grep -oE '<title>[^<]*</title>' "$workdir/api-health-body" | head -n 1 || true)"
           echo "DIAG health first 160 bytes (hex):"
           head -c 160 "$workdir/api-health-body" | od -An -tx1
           jq -e '.status == "ok" and .aiProviderConfigured == true' "$workdir/api-health-body" >/dev/null
