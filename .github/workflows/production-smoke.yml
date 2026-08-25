@@ -67,16 +67,16 @@ jobs:
             (( root_bytes > 500 )) || { echo "FAIL https://$domain/: HTML response is unexpectedly small ($root_bytes bytes)" >&2; exit 1; }
           done
 
-          status="$(get_request "https://quatsch.pro/healthz" "$workdir/health-body" "$workdir/health-headers")"
+          status="$(get_request "https://www.quatsch.pro/healthz" "$workdir/health-body" "$workdir/health-headers")"
           assert_status "$status" "200" "/healthz"
           # Railway uses /healthz for liveness. The public API health route below validates the JSON contract.
 
-          status="$(get_request "https://quatsch.pro/hcgi/api/health" "$workdir/api-health-body" "$workdir/api-health-headers")"
+          status="$(get_request "https://www.quatsch.pro/hcgi/api/health" "$workdir/api-health-body" "$workdir/api-health-headers")"
           assert_status "$status" "200" "/hcgi/api/health"
           jq -e '.status == "ok" and .aiProviderConfigured == true' "$workdir/api-health-body" >/dev/null
 
           for path in /.env /.git/config /wp-admin/install.php; do
-            status="$(get_request "https://quatsch.pro$path" "$workdir/not-found-body" "$workdir/not-found-headers")"
+            status="$(get_request "https://www.quatsch.pro$path" "$workdir/not-found-body" "$workdir/not-found-headers")"
             assert_status "$status" "404" "$path"
             content_type="$(header_value content-type "$workdir/not-found-headers")"
             [[ "$content_type" == application/json* ]] || { echo "FAIL $path: unexpected Content-Type $content_type" >&2; exit 1; }
@@ -88,11 +88,11 @@ jobs:
             --user-agent "quatsch.pro-production-smoke/1.0" \
             --header "Content-Type: application/json" \
             --header "X-Requested-With: XMLHttpRequest" \
-            --header "Origin: https://quatsch.pro" \
+            --header "Origin: https://www.quatsch.pro" \
             --data-binary '{"text":"Abschliessender Produktions-Funktionstest.","targetLanguageName":"English","targetLanguageCode":"en-US"}' \
             --dump-header "$workdir/translate-headers" --output "$workdir/translate-body" \
             --write-out "%{http_code}" \
-            "https://quatsch.pro/hcgi/api/translate")"
+            "https://www.quatsch.pro/hcgi/api/translate")"
           assert_status "$translate_status" "200" "/hcgi/api/translate"
           jq -e '
             (.translation | type == "string" and length > 0) and
@@ -107,11 +107,11 @@ jobs:
             --user-agent "quatsch.pro-production-smoke/1.0" \
             --header "Content-Type: application/json" \
             --header "X-Requested-With: XMLHttpRequest" \
-            --header "Origin: https://quatsch.pro" \
+            --header "Origin: https://www.quatsch.pro" \
             --data-binary '{"text":"Final production test successful.","langCode":"en-US"}' \
             --dump-header "$workdir/tts-headers" --output "$workdir/tts-audio" \
             --write-out "%{http_code}" \
-            "https://quatsch.pro/hcgi/api/tts")"
+            "https://www.quatsch.pro/hcgi/api/tts")"
           assert_status "$tts_status" "200" "/hcgi/api/tts"
           tts_content_type="$(header_value content-type "$workdir/tts-headers")"
           [[ "$tts_content_type" == audio/mpeg* ]] || { echo "FAIL TTS: unexpected Content-Type $tts_content_type" >&2; exit 1; }
