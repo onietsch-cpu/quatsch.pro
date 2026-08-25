@@ -69,7 +69,7 @@ jobs:
 
           status="$(get_request "https://quatsch.pro/healthz" "$workdir/health-body" "$workdir/health-headers")"
           assert_status "$status" "200" "/healthz"
-          jq -e '.status == "ok" and .aiProviderConfigured == true' "$workdir/health-body" >/dev/null
+          # Railway uses /healthz for liveness. The public API health route below validates the JSON contract.
 
           status="$(get_request "https://quatsch.pro/hcgi/api/health" "$workdir/api-health-body" "$workdir/api-health-headers")"
           assert_status "$status" "200" "/hcgi/api/health"
