@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { Route, Routes, BrowserRouter as Router } from 'react-router-dom';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import ScrollToTop from './components/ScrollToTop';
 import Layout from './components/Layout';
 import HomePage from './pages/HomePage';
@@ -58,6 +59,7 @@ function App() {
 					<Route path="/settings" element={<SettingsPage />} />
 				</Route>
 			</Routes>
+			<SpeedInsights />
 		</Router>
 	);
 }
