@@ -29,26 +29,62 @@ export function isNumericOnlyText(value) {
 	return /\p{N}/u.test(text) && /^[\p{N}\p{P}\p{S}\s]+$/u.test(text);
 }
 
-export function isValidTranslation(result, sourceText, targetLanguageCode) {
-	if (!result || typeof result.translation !== 'string' || !result.translation.trim()) return false;
-
+export function validateTranslation(result, sourceText, targetLanguageCode) {
 	const targetBase = baseLanguage(targetLanguageCode);
-	const translatedBase = baseLanguage(result.translatedLanguageCode);
-	if (targetBase && translatedBase !== targetBase) return false;
+	const translatedBase = baseLanguage(result?.translatedLanguageCode);
+	const sourceBase = baseLanguage(result?.detectedLanguageCode);
+	const details = {
+		expectedLanguageCode: targetBase || 'unspecified',
+		reportedLanguageCode: translatedBase || 'unspecified',
+		detectedLanguageCode: sourceBase || 'unspecified',
+	};
+
+	if (!result || typeof result.translation !== 'string' || !result.translation.trim()) {
+		return { valid: false, reason: 'missing_translation', ...details };
+	}
+	if (targetBase && !translatedBase) {
+		return { valid: false, reason: 'missing_translated_language', ...details };
+	}
+	if (targetBase && translatedBase !== targetBase) {
+		return { valid: false, reason: 'target_language_mismatch', ...details };
+	}
 
 	const unchanged = normalizeComparableText(result.translation) === normalizeComparableText(sourceText);
-	if (unchanged && isNumericOnlyText(sourceText)) return false;
-
-	const sourceBase = baseLanguage(result.detectedLanguageCode);
-	return !unchanged || !targetBase || sourceBase === targetBase;
+	if (unchanged && isNumericOnlyText(sourceText)) {
+		return { valid: false, reason: 'numeric_source_unchanged', ...details };
+	}
+	if (unchanged && targetBase && sourceBase !== targetBase) {
+		return { valid: false, reason: 'source_copied', ...details };
+	}
+	return { valid: true, reason: 'valid', ...details };
 }
 
-async function requestTranslation({ text, targetLanguageName, targetLanguageCode, correction = false }) {
+export function isValidTranslation(result, sourceText, targetLanguageCode) {
+	return validateTranslation(result, sourceText, targetLanguageCode).valid;
+}
+
+function correctionInstruction(reason) {
+	switch (reason) {
+		case 'missing_translation':
+			return ' Return a complete, non-empty translation.';
+		case 'missing_translated_language':
+		case 'target_language_mismatch':
+			return ' Use the requested target language and report its correct BCP-47 code.';
+		case 'numeric_source_unchanged':
+			return ' Spell out the complete numeric value in target-language words; do not return the original digits.';
+		case 'source_copied':
+			return ' Do not copy the source. Translate it into the requested target language.';
+		default:
+			return ' Correct the output language and return the required JSON.';
+	}
+}
+
+async function requestTranslation({ text, targetLanguageName, targetLanguageCode, correctionReason = '' }) {
 	const numericInstruction = isNumericOnlyText(text)
 		? ' The source is numeric-only: spell out its complete value in target-language words; do not return the digits unchanged.'
 		: '';
-	const correctionPrompt = correction
-		? '\n\nThe previous answer was invalid. Correct the output language and do not copy the source. For numeric-only input, return target-language number words.'
+	const correctionPrompt = correctionReason
+		? `\n\nThe previous answer was invalid.${correctionInstruction(correctionReason)}`
 		: '';
 
 	return generateJson({
@@ -57,12 +93,21 @@ async function requestTranslation({ text, targetLanguageName, targetLanguageCode
 	});
 }
 
+function validationContext(req, validation) {
+	return {
+		requestId: req.requestId,
+		validationReason: validation.reason,
+		expectedLanguageCode: validation.expectedLanguageCode,
+		reportedLanguageCode: validation.reportedLanguageCode,
+		detectedLanguageCode: validation.detectedLanguageCode,
+	};
+}
+
 export default async (req, res) => {
 	const { text, targetLanguageName, targetLanguageCode, _hp } = req.body || {};
-	const ip = req.ip || 'unknown';
 
 	if (_hp && String(_hp).trim()) {
-		logger.warn(`translate: honeypot triggered ip=${ip}`);
+		logger.warn('translate_honeypot_triggered', { requestId: req.requestId });
 		return res.json({ detectedLanguageName: '', detectedLanguageCode: '', translatedLanguageCode: '', translation: '' });
 	}
 	if (!text || typeof text !== 'string' || !text.trim()) {
@@ -80,14 +125,21 @@ export default async (req, res) => {
 
 	const sourceText = text.trim();
 	let result = await requestTranslation({ text: sourceText, targetLanguageName, targetLanguageCode });
+	let validation = validateTranslation(result, sourceText, targetLanguageCode);
 
-	if (!isValidTranslation(result, sourceText, targetLanguageCode)) {
-		logger.warn(`translate: invalid output, retrying target="${targetLanguageCode || targetLanguageName}" ip=${ip}`);
-		result = await requestTranslation({ text: sourceText, targetLanguageName, targetLanguageCode, correction: true });
+	if (!validation.valid) {
+		logger.warn('translate_invalid_output_retrying', validationContext(req, validation));
+		result = await requestTranslation({
+			text: sourceText,
+			targetLanguageName,
+			targetLanguageCode,
+			correctionReason: validation.reason,
+		});
+		validation = validateTranslation(result, sourceText, targetLanguageCode);
 	}
 
-	if (!isValidTranslation(result, sourceText, targetLanguageCode)) {
-		logger.error(`translate: invalid output after retry target="${targetLanguageCode || targetLanguageName}" ip=${ip}`);
+	if (!validation.valid) {
+		logger.error('translate_invalid_output_after_retry', validationContext(req, validation));
 		return res.status(502).json({ error: 'The translation service returned an invalid translation.' });
 	}
 
