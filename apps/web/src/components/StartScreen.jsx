@@ -5,11 +5,26 @@ import InstallButton from '@/components/InstallButton';
 import { ackPrivacy, hasAckedPrivacy } from '@/lib/storage';
 
 const SPONSORS = [
-	{ name: 'deutschland.money', subtitle: 'Dachportal für Immobilien, Finanzen und Firmengründung', url: 'https://deutschland.money' },
-	{ name: 'cashanlage.de', subtitle: 'Kapitalanlagen', url: 'https://cashanlage.de' },
-	{ name: 'ihr-makler24.de', subtitle: 'Ihr Immobilienbüro', url: 'https://ihr-makler24.de' },
-	{ name: 'finanzierungspilot.de', subtitle: 'Baufinanzierung', url: 'https://finanzierungspilot.de' },
-	{ name: 'muh.bet', subtitle: 'Kostenloser Auswanderungsleitfaden', url: 'https://muh.bet' },
+	{
+		name: 'Sicher. Schnell. Privat. Mit NordVPN.',
+		subtitle: 'Schützt deine Verbindung, Privatsphäre und Daten online.',
+		url: 'https://go.nordvpn.net/aff_c?offer_id=15&aff_id=152465',
+	},
+	{
+		name: 'Safety Wing Travelinsurance',
+		subtitle: 'Worldwide longtime protection for a good price',
+		url: 'https://safetywing.com/nomad-insurance?referenceID=26564066&utm_source=26564066&utm_medium=Ambassador',
+	},
+	{
+		name: 'nurx.com',
+		subtitle: 'Get weight management treatment for as low as $0 with insurance',
+		url: 'https://api.adindex.com/v1/redirect?advertiserId=11EE9038E2B36F6284AA14DDA9D518B0&adspaceId=11F1A2D383B6DABDBBD014DDA9D518B0',
+	},
+	{
+		name: 'deutschland.money',
+		subtitle: 'Dachportal für Immobilien, Finanzen und Firmengründung',
+		url: 'https://deutschland.money',
+	},
 ];
 
 export default function StartScreen({ onStart }) {
