@@ -11,7 +11,7 @@ const SPONSORS = [
 		url: 'https://go.nordvpn.net/aff_c?offer_id=15&aff_id=152465',
 	},
 	{
-		name: 'SafetyWing Travel Insurance',
+		name: 'Safety Wing Travelinsurance',
 		subtitle: 'Worldwide longtime protection for a good price',
 		url: 'https://safetywing.com/nomad-insurance?referenceID=26564066&utm_source=26564066&utm_medium=Ambassador',
 	},
