@@ -307,7 +307,7 @@ export function createTimedSpeechRecognition({
 			? maxDurationMs
 			: SPEECH_INPUT_MAX_DURATION_MS;
 	const deadline = Date.now() + limitMs;
-	const finalParts = [];
+	const finalParts = new Map();
 	let interimTranscript = '';
 	let recognition = null;
 	let finished = false;
@@ -315,7 +315,11 @@ export function createTimedSpeechRecognition({
 	let timeoutId = null;
 	let restartId = null;
 
-	const hasTranscript = () => Boolean(normalizeTranscript([...finalParts, interimTranscript]));
+	const getFinalParts = () => [...finalParts.keys()]
+		.sort((a, b) => a - b)
+		.map((key) => finalParts.get(key));
+
+	const hasTranscript = () => Boolean(normalizeTranscript([...getFinalParts(), interimTranscript]));
 
 	const cleanupTimers = () => {
 		if (timeoutId) {
@@ -343,7 +347,7 @@ export function createTimedSpeechRecognition({
 		finished = true;
 		cleanupTimers();
 		detachRecognition();
-		const transcript = normalizeTranscript([...finalParts, interimTranscript]);
+		const transcript = normalizeTranscript([...getFinalParts(), interimTranscript]);
 		if (transcript) {
 			onResult && onResult(transcript);
 		}
@@ -390,15 +394,13 @@ export function createTimedSpeechRecognition({
 				const transcript = result?.[0]?.transcript?.trim();
 				if (!transcript) continue;
 				if (result.isFinal) {
-					finalParts.push(transcript);
+					finalParts.set(i, transcript);
 					nextInterim = '';
 				} else {
 					nextInterim = `${nextInterim} ${transcript}`.trim();
 				}
 			}
-			if (nextInterim) {
-				interimTranscript = nextInterim;
-			}
+			interimTranscript = nextInterim;
 		};
 
 		recognition.onerror = (event) => {

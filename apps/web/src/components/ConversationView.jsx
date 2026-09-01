@@ -372,7 +372,7 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 			</main>
 
 			{/* Input / control area */}
-			<div className="sticky bottom-0 border-t border-slate-100 bg-white px-5 pb-5 pt-4">
+			<div className="sticky bottom-16 border-t border-slate-100 bg-white px-5 pb-5 pt-4 md:bottom-0">
 				<div className="mx-auto w-full max-w-lg">
 					{/* Two clearly labeled direction mic buttons */}
 					<div className="grid grid-cols-2 gap-3">
