@@ -380,6 +380,7 @@ export function createTimedSpeechRecognition({
 	let timeoutId = null;
 	let restartId = null;
 	let endPauseId = null;
+	let speechEndedAt = 0;
 
 	const getFinalParts = () => [...finalParts.keys()]
 		.sort((a, b) => a - b)
@@ -406,8 +407,9 @@ export function createTimedSpeechRecognition({
 	};
 
 	const finishAfterPause = () => {
-		if (!pauseMs || finished || manuallyStopped || !hasTranscript()) return;
+		if (!pauseMs || !speechEndedAt || finished || manuallyStopped || !hasTranscript()) return;
 		clearEndPause();
+		const remainingPauseMs = Math.max(0, pauseMs - (Date.now() - speechEndedAt));
 		endPauseId = setTimeout(() => {
 			endPauseId = null;
 			if (finished || manuallyStopped || !hasTranscript()) return;
@@ -422,7 +424,17 @@ export function createTimedSpeechRecognition({
 			} catch {
 				finish();
 			}
-		}, pauseMs);
+		}, remainingPauseMs);
+	};
+
+	const handleSpeechStart = () => {
+		speechEndedAt = 0;
+		clearEndPause();
+	};
+
+	const handleSpeechEnd = () => {
+		speechEndedAt = Date.now();
+		finishAfterPause();
 	};
 
 	const detachRecognition = () => {
@@ -496,9 +508,10 @@ export function createTimedSpeechRecognition({
 				}
 			}
 			interimTranscript = nextInterim;
+			if (speechEndedAt) finishAfterPause();
 		};
-		recognition.onspeechstart = clearEndPause;
-		recognition.onspeechend = finishAfterPause;
+		recognition.onspeechstart = handleSpeechStart;
+		recognition.onspeechend = handleSpeechEnd;
 
 		recognition.onerror = (event) => {
 			const code = event?.error || 'unknown';
