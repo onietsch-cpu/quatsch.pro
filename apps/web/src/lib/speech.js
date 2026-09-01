@@ -380,12 +380,19 @@ export function createTimedSpeechRecognition({
 	let timeoutId = null;
 	let restartId = null;
 	let endPauseId = null;
+	let speechEndedAt = 0;
 
 	const getFinalParts = () => [...finalParts.keys()]
 		.sort((a, b) => a - b)
 		.map((key) => finalParts.get(key));
 
 	const hasTranscript = () => Boolean(normalizeTranscript([...getFinalParts(), interimTranscript]));
+
+	const clearEndPause = () => {
+		if (!endPauseId) return;
+		clearTimeout(endPauseId);
+		endPauseId = null;
+	};
 
 	const cleanupTimers = () => {
 		if (timeoutId) {
@@ -396,15 +403,13 @@ export function createTimedSpeechRecognition({
 			clearTimeout(restartId);
 			restartId = null;
 		}
-		if (endPauseId) {
-			clearTimeout(endPauseId);
-			endPauseId = null;
-		}
+		clearEndPause();
 	};
 
 	const finishAfterPause = () => {
-		if (!pauseMs || finished || manuallyStopped || !hasTranscript()) return;
-		if (endPauseId) clearTimeout(endPauseId);
+		if (!pauseMs || !speechEndedAt || finished || manuallyStopped || !hasTranscript()) return;
+		clearEndPause();
+		const remainingPauseMs = Math.max(0, pauseMs - (Date.now() - speechEndedAt));
 		endPauseId = setTimeout(() => {
 			endPauseId = null;
 			if (finished || manuallyStopped || !hasTranscript()) return;
@@ -419,7 +424,17 @@ export function createTimedSpeechRecognition({
 			} catch {
 				finish();
 			}
-		}, pauseMs);
+		}, remainingPauseMs);
+	};
+
+	const handleSpeechStart = () => {
+		speechEndedAt = 0;
+		clearEndPause();
+	};
+
+	const handleSpeechEnd = () => {
+		speechEndedAt = Date.now();
+		finishAfterPause();
 	};
 
 	const detachRecognition = () => {
@@ -429,6 +444,8 @@ export function createTimedSpeechRecognition({
 		current.onresult = null;
 		current.onerror = null;
 		current.onend = null;
+		current.onspeechstart = null;
+		current.onspeechend = null;
 		return current;
 	};
 
@@ -491,8 +508,10 @@ export function createTimedSpeechRecognition({
 				}
 			}
 			interimTranscript = nextInterim;
-			finishAfterPause();
+			if (speechEndedAt) finishAfterPause();
 		};
+		recognition.onspeechstart = handleSpeechStart;
+		recognition.onspeechend = handleSpeechEnd;
 
 		recognition.onerror = (event) => {
 			const code = event?.error || 'unknown';

@@ -56,7 +56,6 @@ test('timed speech recognition submits interim transcript when the limit expires
 			},
 		],
 	});
-
 	await ended;
 	assert.equal(captured, 'longer speaker input');
 });
@@ -394,8 +393,66 @@ test('timed speech recognition submits after the configured end-of-speech pause'
 			},
 		],
 	});
+	await new Promise((resolve) => setTimeout(resolve, 10));
+	assert.equal(instances[0].stopped, undefined, 'transcript updates alone do not imply silence');
+	instances[0].onspeechend();
 
 	await ended;
 	assert.equal(instances[0].stopped, true);
 	assert.equal(captured, 'see you tomorrow');
+});
+
+test('timed speech recognition handles speech-end before a delayed transcript result', async (t) => {
+	const originalWindow = global.window;
+	const instances = [];
+
+	class FakeRecognition {
+		start() {
+			instances.push(this);
+		}
+
+		stop() {
+			this.stopped = true;
+			this.onend?.();
+		}
+
+		abort() {
+			this.aborted = true;
+		}
+	}
+
+	global.window = { SpeechRecognition: FakeRecognition };
+	t.after(() => {
+		global.window = originalWindow;
+	});
+
+	let captured = '';
+	const ended = new Promise((resolve, reject) => {
+		createTimedSpeechRecognition({
+			maxDurationMs: 1_000,
+			endPauseMs: 5,
+			onResult: (text) => {
+				captured = text;
+			},
+			onError: reject,
+			onEnd: resolve,
+		});
+	});
+
+	instances[0].onspeechend();
+	await new Promise((resolve) => setTimeout(resolve, 10));
+	assert.equal(instances[0].stopped, undefined, 'speech-end waits for a usable transcript');
+	instances[0].onresult({
+		resultIndex: 0,
+		results: [
+			{
+				0: { transcript: ' short utterance ' },
+				isFinal: true,
+			},
+		],
+	});
+
+	await ended;
+	assert.equal(instances[0].stopped, true);
+	assert.equal(captured, 'short utterance');
 });
