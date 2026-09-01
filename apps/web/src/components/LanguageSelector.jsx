@@ -141,7 +141,7 @@ export default function LanguageSelector({ onConfirm, onCancel, forceMode }) {
 			: 'Which language does your conversation partner speak?';
 
 	return (
-		<div className="min-h-[100dvh] bg-gradient-to-b from-[#EAF2FB] to-white px-5 pb-32 pt-8">
+		<div className="min-h-[100dvh] bg-gradient-to-b from-[#EAF2FB] to-white px-5 pb-48 pt-8 md:pb-32">
 			<div className="mx-auto w-full max-w-lg">
 				<div className="flex items-center justify-between">
 					<button
@@ -274,7 +274,7 @@ export default function LanguageSelector({ onConfirm, onCancel, forceMode }) {
 				</AnimatePresence>
 			</div>
 
-			<div className="fixed inset-x-0 bottom-0 border-t border-slate-100 bg-white/95 px-5 py-4 backdrop-blur">
+			<div className="fixed inset-x-0 bottom-16 z-10 border-t border-slate-100 bg-white/95 px-5 py-4 backdrop-blur md:bottom-0">
 				<div className="mx-auto w-full max-w-lg">
 					<motion.button
 						whileTap={{ scale: (mode === 'single' ? singleCode : canGoNext) ? 0.97 : 1 }}

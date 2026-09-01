@@ -456,3 +456,56 @@ test('timed speech recognition handles speech-end before a delayed transcript re
 	assert.equal(instances[0].stopped, true);
 	assert.equal(captured, 'short utterance');
 });
+
+test('single-utterance recognition stops and submits as soon as Chrome returns a final result', async (t) => {
+	const originalWindow = global.window;
+	const instances = [];
+
+	class FakeRecognition {
+		start() {
+			instances.push(this);
+		}
+
+		stop() {
+			this.stopped = true;
+			this.onend?.();
+		}
+
+		abort() {
+			this.aborted = true;
+		}
+	}
+
+	global.window = { SpeechRecognition: FakeRecognition };
+	t.after(() => {
+		global.window = originalWindow;
+	});
+
+	let captured = '';
+	const ended = new Promise((resolve, reject) => {
+		createTimedSpeechRecognition({
+			continuous: false,
+			maxDurationMs: 1_000,
+			onResult: (text) => {
+				captured = text;
+			},
+			onError: reject,
+			onEnd: resolve,
+		});
+	});
+
+	assert.equal(instances[0].continuous, false);
+	instances[0].onresult({
+		resultIndex: 0,
+		results: [
+			{
+				0: { transcript: ' hello from chrome ' },
+				isFinal: true,
+			},
+		],
+	});
+
+	await ended;
+	assert.equal(instances[0].stopped, true);
+	assert.equal(captured, 'hello from chrome');
+});
