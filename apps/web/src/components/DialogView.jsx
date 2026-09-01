@@ -7,6 +7,7 @@ import {
 	AlertTriangle,
 	LogOut,
 	X,
+	StopCircle,
 	ArrowRightLeft,
 	ImageIcon,
 	Search,
@@ -235,10 +236,14 @@ export default function DialogView({ mode, targetCode, langACode, langBCode, onE
 		runTranslation(input);
 	}, [error, runTranslation]);
 
-	const stopListening = useCallback(() => {
+	const stopListening = useCallback(({ submitResult = false } = {}) => {
 		if (recognitionRef.current) {
 			try {
-				recognitionRef.current.stop();
+				if (submitResult && typeof recognitionRef.current.finish === 'function') {
+					recognitionRef.current.finish();
+				} else {
+					recognitionRef.current.stop();
+				}
 			} catch {
 				/* noop */
 			}
@@ -250,7 +255,7 @@ export default function DialogView({ mode, targetCode, langACode, langBCode, onE
 		if (!recognitionSupported) return;
 
 		if (isListening) {
-			stopListening();
+			stopListening({ submitResult: true });
 			return;
 		}
 
@@ -511,13 +516,13 @@ export default function DialogView({ mode, targetCode, langACode, langBCode, onE
 									? 'animate-mic-pulse bg-teal-500'
 									: 'bg-[#1976D2] hover:bg-[#0B1F3A]'
 							}`}
-							aria-label="Zum Sprechen tippen"
+							aria-label={isListening ? 'Aufnahme beenden und übersetzen' : 'Zum Sprechen tippen'}
 						>
-							<Mic className="h-9 w-9" />
+							{isListening ? <StopCircle className="h-9 w-9" /> : <Mic className="h-9 w-9" />}
 						</button>
 						<p className="mt-2 text-sm font-semibold text-slate-700">
 							{isListening
-								? 'Listening — up to 60 seconds …'
+								? 'Listening — tap again to translate'
 								: isDialogMode && isTranslating
 								? 'Translating — please wait for your turn …'
 								: isDialogMode

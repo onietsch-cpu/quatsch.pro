@@ -281,12 +281,73 @@ export function isSpeechRecognitionSupported() {
 	return typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
 }
 
-function normalizeTranscript(parts) {
-	return parts
-		.filter(Boolean)
-		.join(' ')
+function normalizeTranscriptPart(value) {
+	return String(value || '')
 		.replace(/\s+/g, ' ')
 		.trim();
+}
+
+function comparableTranscript(value) {
+	return normalizeTranscriptPart(value)
+		.normalize('NFKC')
+		.toLocaleLowerCase()
+		.replace(/[\p{P}\p{S}\s]+/gu, ' ')
+		.trim();
+}
+
+function findWordOverlap(left, right) {
+	const leftWords = comparableTranscript(left).split(' ').filter(Boolean);
+	const rightWords = comparableTranscript(right).split(' ').filter(Boolean);
+	const max = Math.min(leftWords.length, rightWords.length);
+	for (let size = max; size > 0; size -= 1) {
+		if (leftWords.slice(-size).join('\u0000') === rightWords.slice(0, size).join('\u0000')) {
+			return size;
+		}
+	}
+	return 0;
+}
+
+function mergeTranscriptParts(parts) {
+	let transcript = '';
+	for (const rawPart of parts) {
+		const part = normalizeTranscriptPart(rawPart);
+		if (!part) continue;
+		if (!transcript) {
+			transcript = part;
+			continue;
+		}
+
+		const currentComparable = comparableTranscript(transcript);
+		const partComparable = comparableTranscript(part);
+		if (!partComparable) continue;
+
+		if (
+			partComparable === currentComparable ||
+			partComparable.startsWith(`${currentComparable} `)
+		) {
+			transcript = part;
+			continue;
+		}
+		if (
+			currentComparable === partComparable ||
+			currentComparable.endsWith(` ${partComparable}`)
+		) {
+			continue;
+		}
+
+		const overlap = findWordOverlap(transcript, part);
+		if (overlap > 0) {
+			const remaining = part.split(/\s+/).slice(overlap).join(' ');
+			transcript = normalizeTranscriptPart(`${transcript} ${remaining}`);
+		} else {
+			transcript = normalizeTranscriptPart(`${transcript} ${part}`);
+		}
+	}
+	return transcript;
+}
+
+function normalizeTranscript(parts) {
+	return mergeTranscriptParts(parts);
 }
 
 export function createTimedSpeechRecognition({
@@ -312,6 +373,7 @@ export function createTimedSpeechRecognition({
 	let recognition = null;
 	let finished = false;
 	let manuallyStopped = false;
+	let finishingForResult = false;
 	let timeoutId = null;
 	let restartId = null;
 
@@ -416,7 +478,7 @@ export function createTimedSpeechRecognition({
 		recognition.onend = () => {
 			if (finished || manuallyStopped) return;
 			detachRecognition();
-			if (hasTranscript() || Date.now() >= deadline) {
+			if (hasTranscript() || finishingForResult || Date.now() >= deadline) {
 				finish();
 				return;
 			}
@@ -450,6 +512,21 @@ export function createTimedSpeechRecognition({
 
 	return {
 		started: !finished,
+		finish() {
+			if (finished) return;
+			finishingForResult = true;
+			cleanupTimers();
+			const current = recognition;
+			if (!current) {
+				finish();
+				return;
+			}
+			try {
+				current.stop();
+			} catch {
+				finish();
+			}
+		},
 		stop() {
 			if (finished) return;
 			manuallyStopped = true;
