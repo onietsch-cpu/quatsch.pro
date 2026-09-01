@@ -96,6 +96,7 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 						langCode,
 						maxDurationMs: SPEECH_INPUT_MAX_DURATION_MS,
 						endPauseMs: SPEECH_INPUT_END_PAUSE_MS,
+						continuous: false,
 						onResult,
 						onError,
 						onEnd,

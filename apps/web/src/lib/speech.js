@@ -355,6 +355,7 @@ export function createTimedSpeechRecognition({
 	langCode = '',
 	maxDurationMs = SPEECH_INPUT_MAX_DURATION_MS,
 	endPauseMs = 0,
+	continuous = true,
 	onResult,
 	onError,
 	onEnd,
@@ -371,6 +372,7 @@ export function createTimedSpeechRecognition({
 			: SPEECH_INPUT_MAX_DURATION_MS;
 	const deadline = Date.now() + limitMs;
 	const pauseMs = Number.isFinite(endPauseMs) && endPauseMs > 0 ? endPauseMs : 0;
+	const isContinuous = continuous !== false;
 	const finalParts = new Map();
 	let interimTranscript = '';
 	let recognition = null;
@@ -490,24 +492,36 @@ export function createTimedSpeechRecognition({
 		let recoverableNoSpeech = false;
 		recognition = new SR();
 		recognition.lang = langCode || '';
-		recognition.continuous = true;
+		recognition.continuous = isContinuous;
 		recognition.interimResults = true;
 		recognition.maxAlternatives = 1;
 
 		recognition.onresult = (event) => {
 			let nextInterim = '';
+			let receivedFinalResult = false;
 			for (let i = event.resultIndex; i < event.results.length; i += 1) {
 				const result = event.results[i];
 				const transcript = result?.[0]?.transcript?.trim();
 				if (!transcript) continue;
 				if (result.isFinal) {
 					finalParts.set(i, transcript);
+					receivedFinalResult = true;
 					nextInterim = '';
 				} else {
 					nextInterim = `${nextInterim} ${transcript}`.trim();
 				}
 			}
 			interimTranscript = nextInterim;
+			if (!isContinuous && receivedFinalResult) {
+				finishingForResult = true;
+				clearEndPause();
+				try {
+					recognition.stop();
+				} catch {
+					finish();
+				}
+				return;
+			}
 			if (speechEndedAt) finishAfterPause();
 		};
 		recognition.onspeechstart = handleSpeechStart;
