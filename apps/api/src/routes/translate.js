@@ -79,9 +79,18 @@ function correctionInstruction(reason) {
 	}
 }
 
-async function requestTranslation({ text, targetLanguageName, targetLanguageCode, correctionReason = '' }) {
+async function requestTranslation({
+	text,
+	sourceLanguageCode,
+	targetLanguageName,
+	targetLanguageCode,
+	correctionReason = '',
+}) {
 	const numericInstruction = isNumericOnlyText(text)
 		? ' The source is numeric-only: spell out its complete value in target-language words; do not return the digits unchanged.'
+		: '';
+	const sourceHint = sourceLanguageCode
+		? ` Source language hint from the conversation direction: ${sourceLanguageCode}.`
 		: '';
 	const correctionPrompt = correctionReason
 		? `\n\nThe previous answer was invalid.${correctionInstruction(correctionReason)}`
@@ -89,7 +98,7 @@ async function requestTranslation({ text, targetLanguageName, targetLanguageCode
 
 	return generateJson({
 		systemPrompt: SYSTEM_PROMPT,
-		userPrompt: `Target: ${targetLanguageName} (${targetLanguageCode || 'locale unspecified'}).${numericInstruction}${correctionPrompt}\n\nSource:\n${text}`,
+		userPrompt: `Target: ${targetLanguageName} (${targetLanguageCode || 'locale unspecified'}).${sourceHint}${numericInstruction}${correctionPrompt}\n\nSource:\n${text}`,
 	});
 }
 
@@ -104,7 +113,7 @@ function validationContext(req, validation) {
 }
 
 export default async (req, res) => {
-	const { text, targetLanguageName, targetLanguageCode, _hp } = req.body || {};
+	const { text, sourceLanguageCode, targetLanguageName, targetLanguageCode, _hp } = req.body || {};
 
 	if (_hp && String(_hp).trim()) {
 		logger.warn('translate_honeypot_triggered', { requestId: req.requestId });
@@ -122,15 +131,24 @@ export default async (req, res) => {
 	if (targetLanguageCode !== undefined && (typeof targetLanguageCode !== 'string' || targetLanguageCode.length > 35)) {
 		return res.status(422).json({ error: 'Target language code is invalid.' });
 	}
+	if (sourceLanguageCode !== undefined && (typeof sourceLanguageCode !== 'string' || sourceLanguageCode.length > 35)) {
+		return res.status(422).json({ error: 'Source language code is invalid.' });
+	}
 
 	const sourceText = text.trim();
-	let result = await requestTranslation({ text: sourceText, targetLanguageName, targetLanguageCode });
+	let result = await requestTranslation({
+		text: sourceText,
+		sourceLanguageCode,
+		targetLanguageName,
+		targetLanguageCode,
+	});
 	let validation = validateTranslation(result, sourceText, targetLanguageCode);
 
 	if (!validation.valid) {
 		logger.warn('translate_invalid_output_retrying', validationContext(req, validation));
 		result = await requestTranslation({
 			text: sourceText,
+			sourceLanguageCode,
 			targetLanguageName,
 			targetLanguageCode,
 			correctionReason: validation.reason,

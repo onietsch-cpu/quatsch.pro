@@ -14,6 +14,8 @@ import {
 	Volume2,
 	StopCircle,
 	ArrowRight,
+	Copy,
+	Check,
 } from 'lucide-react';
 import {
 	AlertDialog,
@@ -28,14 +30,19 @@ import {
 import { ConversationEngine, STATES } from '@/lib/conversationEngine';
 import { getLanguageByCode } from '@/lib/languages';
 import { translateConversation } from '@/lib/translateClient';
+import { transcribeAudio } from '@/lib/transcriptionClient';
+import { createTimedAudioTranscription, isAudioCaptureSupported } from '@/lib/audioCapture';
 import {
 	speak,
 	stopSpeaking,
 	loadVoices,
 	onVoicesChanged,
 	isSpeechRecognitionSupported,
+	createTimedSpeechRecognition,
+	SPEECH_INPUT_MAX_DURATION_MS,
 } from '@/lib/speech';
 import { addHistoryEntry, getSettings } from '@/lib/storage';
+import { copyTextToClipboard } from '@/lib/clipboard';
 
 // Render at most this many history entries in the DOM to keep long
 // conversations performant. Older turns are collapsed, never deleted.
@@ -60,12 +67,27 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 	const [settings, setSettings] = useState(() => getSettings());
 	const [confirmOpen, setConfirmOpen] = useState(false);
 	const [textInput, setTextInput] = useState('');
+	const [nearbySpeakerMode, setNearbySpeakerMode] = useState(false);
 	const [recognitionSupported] = useState(() => Boolean(isSpeechRecognitionSupported()));
+	const [audioCaptureSupported] = useState(() => Boolean(isAudioCaptureSupported()));
 
 	const engineRef = useRef(null);
 	const honeypotRef = useRef(null);
 	const lastSavedIdRef = useRef(null);
 	const bottomRef = useRef(null);
+	const nearbySpeakerModeRef = useRef(false);
+
+	const scrollToBottom = useCallback((behavior = 'auto') => {
+		if (typeof window === 'undefined') return;
+		const bottom = bottomRef.current;
+		if (!bottom) return;
+		bottom.scrollIntoView({ behavior, block: 'end' });
+		window.scrollTo({ top: document.documentElement.scrollHeight, behavior });
+	}, []);
+
+	useEffect(() => {
+		nearbySpeakerModeRef.current = nearbySpeakerMode;
+	}, [nearbySpeakerMode]);
 
 	// Build the engine once with real adapters.
 	useEffect(() => {
@@ -78,56 +100,23 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 			rate: getSettings().rate,
 			adapters: {
 				recognize({ langCode, onResult, onError, onEnd }) {
-					const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-					if (!SR) {
-						// No speech recognition available — surface as "blocked" so the
-						// UI shows the tap-to-speak / text-input fallback rather than
-						// ending the dialog.
-						onError({ error: 'blocked' });
-						return { stop() {} };
+					if (nearbySpeakerModeRef.current) {
+						return createTimedAudioTranscription({
+							langCode,
+							maxDurationMs: SPEECH_INPUT_MAX_DURATION_MS,
+							transcribe: transcribeAudio,
+							onResult,
+							onError,
+							onEnd,
+						});
 					}
-					const recognition = new SR();
-					recognition.lang = langCode || '';
-					recognition.continuous = false;
-					recognition.interimResults = false;
-					recognition.maxAlternatives = 1;
-
-					let finalTranscript = '';
-
-					recognition.onresult = (event) => {
-						for (let i = event.resultIndex; i < event.results.length; i += 1) {
-							if (event.results[i].isFinal) {
-								finalTranscript += event.results[i][0].transcript;
-							}
-						}
-					};
-					recognition.onerror = (event) => onError({ error: event.error });
-					recognition.onend = () => {
-						const spoken = finalTranscript.trim();
-						if (spoken) {
-							onResult(spoken);
-						}
-						onEnd();
-					};
-
-					try {
-						recognition.start();
-					} catch (e) {
-						onError({ error: 'blocked', detail: e });
-					}
-
-					return {
-						stop() {
-							try {
-								recognition.onresult = null;
-								recognition.onerror = null;
-								recognition.onend = null;
-								recognition.stop();
-							} catch {
-								/* noop */
-							}
-						},
-					};
+					return createTimedSpeechRecognition({
+						langCode,
+						maxDurationMs: SPEECH_INPUT_MAX_DURATION_MS,
+						onResult,
+						onError,
+						onEnd,
+					});
 				},
 				translate(params) {
 					return translateConversation({
@@ -191,8 +180,9 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 	}, [snap?.lastEntry, settings.saveHistory]);
 
 	useEffect(() => {
-		bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-	}, [snap?.lastEntry, snap?.state]);
+		const raf = window.requestAnimationFrame(() => scrollToBottom('auto'));
+		return () => window.cancelAnimationFrame(raf);
+	}, [snap?.history?.length, snap?.state, snap?.error, scrollToBottom]);
 
 	const state = snap?.state || STATES.IDLE;
 	const direction = snap?.direction || 'AtoB';
@@ -215,11 +205,12 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 			}
 			if (state === STATES.AWAITING_TAP) {
 				engine.startListening(dir);
+				scrollToBottom('smooth');
 			}
 			// TRANSLATING / SPEAKING / ERROR / PAUSED: locked (error has its own
 			// retry controls; paused has a resume control).
 		},
-		[state],
+		[state, scrollToBottom],
 	);
 
 	const handleRetry = useCallback(() => engineRef.current?.retry(), []);
@@ -238,7 +229,8 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 		if (!value) return;
 		engineRef.current?.submitText(value);
 		setTextInput('');
-	}, [textInput]);
+		scrollToBottom('smooth');
+	}, [textInput, scrollToBottom]);
 
 	const confirmEnd = useCallback(() => {
 		engineRef.current?.end();
@@ -258,9 +250,13 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 		state === STATES.TRANSLATING || state === STATES.SPEAKING || state === STATES.LISTENING;
 	const canSubmitText =
 		state === STATES.AWAITING_TAP || state === STATES.ERROR || state === STATES.PAUSED;
+	const speechInputSupported = nearbySpeakerMode ? audioCaptureSupported : recognitionSupported;
 
 	const statusText =
-		(state === STATES.LISTENING && `Listening — ${direction === 'AtoB' ? langA.name : langB.name}`) ||
+		(state === STATES.LISTENING &&
+			`${nearbySpeakerMode ? 'Listening to nearby speaker audio' : 'Listening'} — ${
+				direction === 'AtoB' ? langA.name : langB.name
+			} · up to 60 seconds`) ||
 		(state === STATES.TRANSLATING && 'Translating — please wait …') ||
 		(state === STATES.SPEAKING && `Reading aloud — ${direction === 'AtoB' ? langB.name : langA.name}`) ||
 		(state === STATES.PAUSED && 'Paused') ||
@@ -386,7 +382,7 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 							accent="blue"
 							isActive={direction === 'AtoB'}
 							state={state}
-							recognitionSupported={recognitionSupported}
+							recognitionSupported={speechInputSupported}
 							onPress={() => handleDirectionPress('AtoB')}
 						/>
 						<DirectionMicButton
@@ -395,12 +391,27 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 							accent="teal"
 							isActive={direction === 'BtoA'}
 							state={state}
-							recognitionSupported={recognitionSupported}
+							recognitionSupported={speechInputSupported}
 							onPress={() => handleDirectionPress('BtoA')}
 						/>
 					</div>
 
 					<p className="mt-3 text-center text-sm font-semibold text-slate-700">{statusText}</p>
+
+					<button
+						type="button"
+						aria-pressed={nearbySpeakerMode}
+						onClick={() => setNearbySpeakerMode((value) => !value)}
+						disabled={isBusy || !audioCaptureSupported}
+						className={`mx-auto mt-3 flex items-center justify-center gap-1.5 rounded-full border px-4 py-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+							nearbySpeakerMode
+								? 'border-teal-500 bg-teal-50 text-teal-700'
+								: 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+						}`}
+					>
+						<Volume2 className="h-3.5 w-3.5" />
+						Nearby speaker audio
+					</button>
 
 					{state === STATES.SPEAKING && (
 						<button
@@ -411,10 +422,9 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 						</button>
 					)}
 
-					{!recognitionSupported && (
+					{!speechInputSupported && (
 						<p className="mt-2 max-w-sm mx-auto text-center text-xs text-amber-700">
-							Speech recognition is not supported in this browser. Please use the text input
-							below.
+							Voice capture is not supported in this browser. Please use the text input below.
 						</p>
 					)}
 
@@ -603,10 +613,18 @@ function DirectionMicButton({ fromName, toName, accent, isActive, state, recogni
 }
 
 function TurnCard({ entry, langA, langB }) {
+	const [copied, setCopied] = useState(false);
 	const fromLang = entry.direction === 'AtoB' ? langA : langB;
 	const toLang = entry.direction === 'AtoB' ? langB : langA;
 	const handleSpeak = () => {
 		speak(entry.translation, entry.targetCode, { rateMultiplier: getSettings().rate });
+	};
+	const handleCopy = async () => {
+		const ok = await copyTextToClipboard(entry.translation);
+		setCopied(ok);
+		if (ok) {
+			setTimeout(() => setCopied(false), 1600);
+		}
 	};
 	return (
 		<div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -614,13 +632,15 @@ function TurnCard({ entry, langA, langB }) {
 				<p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
 					{fromLang.name} · {entry.detectedLanguageName || 'detected'}
 				</p>
-				<p className="mt-1 text-base text-slate-700">{entry.original}</p>
+				<p className="mt-1 whitespace-pre-wrap text-base text-slate-700 selection:bg-blue-100">
+					{entry.original}
+				</p>
 			</div>
 			<div className="px-4 py-4">
 				<p className="text-[11px] font-semibold uppercase tracking-wide text-teal-500">
 					{toLang.name}
 				</p>
-				<p className="mt-1 text-lg font-semibold leading-snug text-slate-900">
+				<p className="mt-1 whitespace-pre-wrap text-lg font-semibold leading-snug text-slate-900 selection:bg-teal-100">
 					{entry.translation}
 				</p>
 				<div className="mt-3 flex flex-wrap gap-2">
@@ -629,6 +649,13 @@ function TurnCard({ entry, langA, langB }) {
 						className="inline-flex items-center gap-1.5 rounded-full bg-[#1976D2] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#0B1F3A] active:scale-[0.98]"
 					>
 						<Volume2 className="h-4 w-4" /> Read aloud
+					</button>
+					<button
+						onClick={handleCopy}
+						className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 active:scale-[0.98]"
+					>
+						{copied ? <Check className="h-4 w-4 text-teal-500" /> : <Copy className="h-4 w-4" />}
+						{copied ? 'Copied' : 'Copy'}
 					</button>
 				</div>
 			</div>

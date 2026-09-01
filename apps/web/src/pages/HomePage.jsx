@@ -1,12 +1,20 @@
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet';
 import StartScreen from '@/components/StartScreen';
-import LanguageSelector from '@/components/LanguageSelector';
-import DialogView from '@/components/DialogView';
 import { getLanguageByCode } from '@/lib/languages';
 import { stopSpeaking } from '@/lib/speech';
 
 const STORAGE_KEY = 'translator_session_single';
+const LanguageSelector = lazy(() => import('@/components/LanguageSelector'));
+const DialogView = lazy(() => import('@/components/DialogView'));
+
+function FlowFallback() {
+	return (
+		<div className="flex min-h-[60dvh] items-center justify-center bg-slate-50 px-6 text-sm font-semibold text-slate-500">
+			Loading …
+		</div>
+	);
+}
 
 function isValidSession(session) {
 	if (!session || typeof session !== 'object') return false;
@@ -68,12 +76,14 @@ export default function HomePage() {
 			</Helmet>
 
 			{stage === 'start' && <StartScreen onStart={handleStart} />}
-			{stage === 'select' && (
-				<LanguageSelector onConfirm={handleConfirmLanguage} onCancel={handleCancelSelect} forceMode="single" />
-			)}
-			{stage === 'dialog' && session && (
-				<DialogView key={session.targetCode} mode="single" targetCode={session.targetCode} onEndDialog={handleEndDialog} />
-			)}
+			<Suspense fallback={<FlowFallback />}>
+				{stage === 'select' && (
+					<LanguageSelector onConfirm={handleConfirmLanguage} onCancel={handleCancelSelect} forceMode="single" />
+				)}
+				{stage === 'dialog' && session && (
+					<DialogView key={session.targetCode} mode="single" targetCode={session.targetCode} onEndDialog={handleEndDialog} />
+				)}
+			</Suspense>
 		</>
 	);
 }

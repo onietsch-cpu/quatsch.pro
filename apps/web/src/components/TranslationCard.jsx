@@ -1,16 +1,17 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Volume2, Copy, RotateCcw, Check, Share2 } from 'lucide-react';
+import { copyTextToClipboard } from '@/lib/clipboard';
 
 export default function TranslationCard({ entry, targetName, onSpeak }) {
 	const [copied, setCopied] = useState(false);
 
 	const handleCopy = async () => {
-		try {
-			await navigator.clipboard.writeText(entry.translation);
+		const ok = await copyTextToClipboard(entry.translation);
+		if (ok) {
 			setCopied(true);
 			setTimeout(() => setCopied(false), 1600);
-		} catch {
+		} else {
 			setCopied(false);
 		}
 	};
