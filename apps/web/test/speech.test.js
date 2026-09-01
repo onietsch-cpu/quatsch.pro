@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
 	createTimedSpeechRecognition,
+	SPEECH_INPUT_END_PAUSE_MS,
 	SPEECH_INPUT_MAX_DURATION_MS,
 } from '../src/lib/speech.js';
 
 test('speech input limit defaults to 60 seconds', () => {
 	assert.equal(SPEECH_INPUT_MAX_DURATION_MS, 60_000);
+	assert.equal(SPEECH_INPUT_END_PAUSE_MS, 1_600);
 });
 
 test('timed speech recognition submits interim transcript when the limit expires', async (t) => {
@@ -343,4 +345,57 @@ test('timed speech recognition can finish early and submit the current transcrip
 
 	await ended;
 	assert.equal(captured, 'hallo, wie geht es dir');
+});
+
+test('timed speech recognition submits after the configured end-of-speech pause', async (t) => {
+	const originalWindow = global.window;
+	const instances = [];
+
+	class FakeRecognition {
+		start() {
+			instances.push(this);
+		}
+
+		stop() {
+			this.stopped = true;
+			this.onend?.();
+		}
+
+		abort() {
+			this.aborted = true;
+		}
+	}
+
+	global.window = { SpeechRecognition: FakeRecognition };
+	t.after(() => {
+		global.window = originalWindow;
+	});
+
+	let captured = '';
+	const ended = new Promise((resolve, reject) => {
+		const controller = createTimedSpeechRecognition({
+			maxDurationMs: 1_000,
+			endPauseMs: 5,
+			onResult: (text) => {
+				captured = text;
+			},
+			onError: reject,
+			onEnd: resolve,
+		});
+		assert.equal(controller.started, true);
+	});
+
+	instances[0].onresult({
+		resultIndex: 0,
+		results: [
+			{
+				0: { transcript: ' see you tomorrow ' },
+				isFinal: false,
+			},
+		],
+	});
+
+	await ended;
+	assert.equal(instances[0].stopped, true);
+	assert.equal(captured, 'see you tomorrow');
 });

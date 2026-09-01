@@ -6,8 +6,8 @@ import { ackPrivacy, hasAckedPrivacy } from '@/lib/storage';
 
 const SPONSORS = [
 	{
-		name: 'Sicher. Schnell. Privat. Mit NordVPN.',
-		subtitle: 'Schützt deine Verbindung, Privatsphäre und Daten online.',
+		name: 'Secure. Fast. Private. With NordVPN.',
+		subtitle: 'Protect your connection, privacy and data online.',
 		url: 'https://go.nordvpn.net/aff_c?offer_id=15&aff_id=152465',
 	},
 	{

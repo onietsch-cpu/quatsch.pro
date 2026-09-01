@@ -30,8 +30,6 @@ import {
 import { ConversationEngine, STATES } from '@/lib/conversationEngine';
 import { getLanguageByCode } from '@/lib/languages';
 import { translateConversation } from '@/lib/translateClient';
-import { transcribeAudio } from '@/lib/transcriptionClient';
-import { createTimedAudioTranscription, isAudioCaptureSupported } from '@/lib/audioCapture';
 import {
 	speak,
 	stopSpeaking,
@@ -40,6 +38,7 @@ import {
 	isSpeechRecognitionSupported,
 	createTimedSpeechRecognition,
 	SPEECH_INPUT_MAX_DURATION_MS,
+	SPEECH_INPUT_END_PAUSE_MS,
 } from '@/lib/speech';
 import { addHistoryEntry, getSettings } from '@/lib/storage';
 import { copyTextToClipboard } from '@/lib/clipboard';
@@ -67,15 +66,12 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 	const [settings, setSettings] = useState(() => getSettings());
 	const [confirmOpen, setConfirmOpen] = useState(false);
 	const [textInput, setTextInput] = useState('');
-	const [nearbySpeakerMode, setNearbySpeakerMode] = useState(false);
 	const [recognitionSupported] = useState(() => Boolean(isSpeechRecognitionSupported()));
-	const [audioCaptureSupported] = useState(() => Boolean(isAudioCaptureSupported()));
 
 	const engineRef = useRef(null);
 	const honeypotRef = useRef(null);
 	const lastSavedIdRef = useRef(null);
 	const bottomRef = useRef(null);
-	const nearbySpeakerModeRef = useRef(false);
 
 	const scrollToBottom = useCallback((behavior = 'auto') => {
 		if (typeof window === 'undefined') return;
@@ -84,10 +80,6 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 		bottom.scrollIntoView({ behavior, block: 'end' });
 		window.scrollTo({ top: document.documentElement.scrollHeight, behavior });
 	}, []);
-
-	useEffect(() => {
-		nearbySpeakerModeRef.current = nearbySpeakerMode;
-	}, [nearbySpeakerMode]);
 
 	// Build the engine once with real adapters.
 	useEffect(() => {
@@ -100,19 +92,10 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 			rate: getSettings().rate,
 			adapters: {
 				recognize({ langCode, onResult, onError, onEnd }) {
-					if (nearbySpeakerModeRef.current) {
-						return createTimedAudioTranscription({
-							langCode,
-							maxDurationMs: SPEECH_INPUT_MAX_DURATION_MS,
-							transcribe: transcribeAudio,
-							onResult,
-							onError,
-							onEnd,
-						});
-					}
 					return createTimedSpeechRecognition({
 						langCode,
 						maxDurationMs: SPEECH_INPUT_MAX_DURATION_MS,
+						endPauseMs: SPEECH_INPUT_END_PAUSE_MS,
 						onResult,
 						onError,
 						onEnd,
@@ -246,17 +229,12 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 	const renderedHistory = history.slice(-MAX_RENDERED_TURNS);
 	const hiddenCount = Math.max(0, history.length - MAX_RENDERED_TURNS);
 
-	const isBusy =
-		state === STATES.TRANSLATING || state === STATES.SPEAKING || state === STATES.LISTENING;
 	const canSubmitText =
 		state === STATES.AWAITING_TAP || state === STATES.ERROR || state === STATES.PAUSED;
-	const speechInputSupported = nearbySpeakerMode ? audioCaptureSupported : recognitionSupported;
 
 	const statusText =
 		(state === STATES.LISTENING &&
-			`${nearbySpeakerMode ? 'Listening to nearby speaker audio' : 'Listening'} — ${
-				direction === 'AtoB' ? langA.name : langB.name
-			} · up to 60 seconds`) ||
+			`Listening — ${direction === 'AtoB' ? langA.name : langB.name} · translates after a short pause`) ||
 		(state === STATES.TRANSLATING && 'Translating — please wait …') ||
 		(state === STATES.SPEAKING && `Reading aloud — ${direction === 'AtoB' ? langB.name : langA.name}`) ||
 		(state === STATES.PAUSED && 'Paused') ||
@@ -382,7 +360,7 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 							accent="blue"
 							isActive={direction === 'AtoB'}
 							state={state}
-							recognitionSupported={speechInputSupported}
+							recognitionSupported={recognitionSupported}
 							onPress={() => handleDirectionPress('AtoB')}
 						/>
 						<DirectionMicButton
@@ -391,27 +369,12 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 							accent="teal"
 							isActive={direction === 'BtoA'}
 							state={state}
-							recognitionSupported={speechInputSupported}
+							recognitionSupported={recognitionSupported}
 							onPress={() => handleDirectionPress('BtoA')}
 						/>
 					</div>
 
 					<p className="mt-3 text-center text-sm font-semibold text-slate-700">{statusText}</p>
-
-					<button
-						type="button"
-						aria-pressed={nearbySpeakerMode}
-						onClick={() => setNearbySpeakerMode((value) => !value)}
-						disabled={isBusy || !audioCaptureSupported}
-						className={`mx-auto mt-3 flex items-center justify-center gap-1.5 rounded-full border px-4 py-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-							nearbySpeakerMode
-								? 'border-teal-500 bg-teal-50 text-teal-700'
-								: 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-						}`}
-					>
-						<Volume2 className="h-3.5 w-3.5" />
-						Nearby speaker audio
-					</button>
 
 					{state === STATES.SPEAKING && (
 						<button
@@ -422,7 +385,7 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 						</button>
 					)}
 
-					{!speechInputSupported && (
+					{!recognitionSupported && (
 						<p className="mt-2 max-w-sm mx-auto text-center text-xs text-amber-700">
 							Voice capture is not supported in this browser. Please use the text input below.
 						</p>
