@@ -56,7 +56,6 @@ test('timed speech recognition submits interim transcript when the limit expires
 			},
 		],
 	});
-
 	await ended;
 	assert.equal(captured, 'longer speaker input');
 });
@@ -394,6 +393,9 @@ test('timed speech recognition submits after the configured end-of-speech pause'
 			},
 		],
 	});
+	await new Promise((resolve) => setTimeout(resolve, 10));
+	assert.equal(instances[0].stopped, undefined, 'transcript updates alone do not imply silence');
+	instances[0].onspeechend();
 
 	await ended;
 	assert.equal(instances[0].stopped, true);

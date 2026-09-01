@@ -387,6 +387,12 @@ export function createTimedSpeechRecognition({
 
 	const hasTranscript = () => Boolean(normalizeTranscript([...getFinalParts(), interimTranscript]));
 
+	const clearEndPause = () => {
+		if (!endPauseId) return;
+		clearTimeout(endPauseId);
+		endPauseId = null;
+	};
+
 	const cleanupTimers = () => {
 		if (timeoutId) {
 			clearTimeout(timeoutId);
@@ -396,15 +402,12 @@ export function createTimedSpeechRecognition({
 			clearTimeout(restartId);
 			restartId = null;
 		}
-		if (endPauseId) {
-			clearTimeout(endPauseId);
-			endPauseId = null;
-		}
+		clearEndPause();
 	};
 
 	const finishAfterPause = () => {
 		if (!pauseMs || finished || manuallyStopped || !hasTranscript()) return;
-		if (endPauseId) clearTimeout(endPauseId);
+		clearEndPause();
 		endPauseId = setTimeout(() => {
 			endPauseId = null;
 			if (finished || manuallyStopped || !hasTranscript()) return;
@@ -429,6 +432,8 @@ export function createTimedSpeechRecognition({
 		current.onresult = null;
 		current.onerror = null;
 		current.onend = null;
+		current.onspeechstart = null;
+		current.onspeechend = null;
 		return current;
 	};
 
@@ -491,8 +496,9 @@ export function createTimedSpeechRecognition({
 				}
 			}
 			interimTranscript = nextInterim;
-			finishAfterPause();
 		};
+		recognition.onspeechstart = clearEndPause;
+		recognition.onspeechend = finishAfterPause;
 
 		recognition.onerror = (event) => {
 			const code = event?.error || 'unknown';
