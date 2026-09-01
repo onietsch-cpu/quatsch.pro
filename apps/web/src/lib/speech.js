@@ -4,6 +4,7 @@ let cachedVoices = [];
 const RECOGNITION_RESTART_DELAY_MS = 80;
 
 export const SPEECH_INPUT_MAX_DURATION_MS = 60_000;
+export const SPEECH_INPUT_END_PAUSE_MS = 1_600;
 
 export function loadVoices() {
 	if (typeof window === 'undefined' || !window.speechSynthesis) {
@@ -353,6 +354,7 @@ function normalizeTranscript(parts) {
 export function createTimedSpeechRecognition({
 	langCode = '',
 	maxDurationMs = SPEECH_INPUT_MAX_DURATION_MS,
+	endPauseMs = 0,
 	onResult,
 	onError,
 	onEnd,
@@ -368,6 +370,7 @@ export function createTimedSpeechRecognition({
 			? maxDurationMs
 			: SPEECH_INPUT_MAX_DURATION_MS;
 	const deadline = Date.now() + limitMs;
+	const pauseMs = Number.isFinite(endPauseMs) && endPauseMs > 0 ? endPauseMs : 0;
 	const finalParts = new Map();
 	let interimTranscript = '';
 	let recognition = null;
@@ -376,6 +379,7 @@ export function createTimedSpeechRecognition({
 	let finishingForResult = false;
 	let timeoutId = null;
 	let restartId = null;
+	let endPauseId = null;
 
 	const getFinalParts = () => [...finalParts.keys()]
 		.sort((a, b) => a - b)
@@ -392,6 +396,30 @@ export function createTimedSpeechRecognition({
 			clearTimeout(restartId);
 			restartId = null;
 		}
+		if (endPauseId) {
+			clearTimeout(endPauseId);
+			endPauseId = null;
+		}
+	};
+
+	const finishAfterPause = () => {
+		if (!pauseMs || finished || manuallyStopped || !hasTranscript()) return;
+		if (endPauseId) clearTimeout(endPauseId);
+		endPauseId = setTimeout(() => {
+			endPauseId = null;
+			if (finished || manuallyStopped || !hasTranscript()) return;
+			finishingForResult = true;
+			const current = recognition;
+			if (!current) {
+				finish();
+				return;
+			}
+			try {
+				current.stop();
+			} catch {
+				finish();
+			}
+		}, pauseMs);
 	};
 
 	const detachRecognition = () => {
@@ -463,6 +491,7 @@ export function createTimedSpeechRecognition({
 				}
 			}
 			interimTranscript = nextInterim;
+			finishAfterPause();
 		};
 
 		recognition.onerror = (event) => {
