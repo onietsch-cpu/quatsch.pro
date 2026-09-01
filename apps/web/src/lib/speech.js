@@ -1,6 +1,9 @@
 // Sprachausgabe (Web Speech Synthesis API) mit passender Stimmenauswahl.
 
 let cachedVoices = [];
+const RECOGNITION_RESTART_DELAY_MS = 80;
+
+export const SPEECH_INPUT_MAX_DURATION_MS = 60_000;
 
 export function loadVoices() {
 	if (typeof window === 'undefined' || !window.speechSynthesis) {
@@ -276,4 +279,191 @@ export function speak(text, langCode, { onStart, onEnd, onError, rateMultiplier 
 
 export function isSpeechRecognitionSupported() {
 	return typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
+}
+
+function normalizeTranscript(parts) {
+	return parts
+		.filter(Boolean)
+		.join(' ')
+		.replace(/\s+/g, ' ')
+		.trim();
+}
+
+export function createTimedSpeechRecognition({
+	langCode = '',
+	maxDurationMs = SPEECH_INPUT_MAX_DURATION_MS,
+	onResult,
+	onError,
+	onEnd,
+} = {}) {
+	if (!isSpeechRecognitionSupported()) {
+		onError && onError({ error: 'blocked' });
+		return { started: false, stop() {} };
+	}
+
+	const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+	const limitMs =
+		Number.isFinite(maxDurationMs) && maxDurationMs > 0
+			? maxDurationMs
+			: SPEECH_INPUT_MAX_DURATION_MS;
+	const deadline = Date.now() + limitMs;
+	const finalParts = [];
+	let interimTranscript = '';
+	let recognition = null;
+	let finished = false;
+	let manuallyStopped = false;
+	let timeoutId = null;
+	let restartId = null;
+
+	const hasTranscript = () => Boolean(normalizeTranscript([...finalParts, interimTranscript]));
+
+	const cleanupTimers = () => {
+		if (timeoutId) {
+			clearTimeout(timeoutId);
+			timeoutId = null;
+		}
+		if (restartId) {
+			clearTimeout(restartId);
+			restartId = null;
+		}
+	};
+
+	const detachRecognition = () => {
+		if (!recognition) return null;
+		const current = recognition;
+		recognition = null;
+		current.onresult = null;
+		current.onerror = null;
+		current.onend = null;
+		return current;
+	};
+
+	const finish = () => {
+		if (finished) return;
+		finished = true;
+		cleanupTimers();
+		detachRecognition();
+		const transcript = normalizeTranscript([...finalParts, interimTranscript]);
+		if (transcript) {
+			onResult && onResult(transcript);
+		}
+		onEnd && onEnd();
+	};
+
+	const fail = (event) => {
+		if (finished) return;
+		finished = true;
+		cleanupTimers();
+		detachRecognition();
+		onError && onError(event);
+	};
+
+	const restart = () => {
+		if (finished || manuallyStopped) return;
+		const remaining = deadline - Date.now();
+		if (remaining <= 0) {
+			finish();
+			return;
+		}
+		restartId = setTimeout(start, Math.min(RECOGNITION_RESTART_DELAY_MS, remaining));
+	};
+
+	function start() {
+		if (finished || manuallyStopped) return;
+
+		if (Date.now() >= deadline) {
+			finish();
+			return;
+		}
+
+		let recoverableNoSpeech = false;
+		recognition = new SR();
+		recognition.lang = langCode || '';
+		recognition.continuous = true;
+		recognition.interimResults = true;
+		recognition.maxAlternatives = 1;
+
+		recognition.onresult = (event) => {
+			let nextInterim = '';
+			for (let i = event.resultIndex; i < event.results.length; i += 1) {
+				const result = event.results[i];
+				const transcript = result?.[0]?.transcript?.trim();
+				if (!transcript) continue;
+				if (result.isFinal) {
+					finalParts.push(transcript);
+					nextInterim = '';
+				} else {
+					nextInterim = `${nextInterim} ${transcript}`.trim();
+				}
+			}
+			if (nextInterim) {
+				interimTranscript = nextInterim;
+			}
+		};
+
+		recognition.onerror = (event) => {
+			const code = event?.error || 'unknown';
+			if (manuallyStopped && code === 'aborted') return;
+			if (code === 'no-speech' && !hasTranscript() && Date.now() < deadline) {
+				recoverableNoSpeech = true;
+				return;
+			}
+			fail({ error: code, detail: event });
+		};
+
+		recognition.onend = () => {
+			if (finished || manuallyStopped) return;
+			detachRecognition();
+			if (hasTranscript() || Date.now() >= deadline) {
+				finish();
+				return;
+			}
+			if (recoverableNoSpeech || Date.now() < deadline) {
+				restart();
+			}
+		};
+
+		try {
+			recognition.start();
+		} catch (error) {
+			fail({ error: 'blocked', detail: error });
+		}
+	}
+
+	timeoutId = setTimeout(() => {
+		if (finished || manuallyStopped) return;
+		const current = recognition;
+		if (!current) {
+			finish();
+			return;
+		}
+		try {
+			current.stop();
+		} catch {
+			finish();
+		}
+	}, limitMs);
+
+	start();
+
+	return {
+		started: !finished,
+		stop() {
+			if (finished) return;
+			manuallyStopped = true;
+			finished = true;
+			cleanupTimers();
+			const current = detachRecognition();
+			if (!current) return;
+			try {
+				if (typeof current.abort === 'function') {
+					current.abort();
+				} else {
+					current.stop();
+				}
+			} catch {
+				/* noop */
+			}
+		},
+	};
 }

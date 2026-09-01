@@ -43,6 +43,8 @@ import {
 	loadVoices,
 	onVoicesChanged,
 	isSpeechRecognitionSupported,
+	createTimedSpeechRecognition,
+	SPEECH_INPUT_MAX_DURATION_MS,
 } from '@/lib/speech';
 
 export default function DialogView({ mode, targetCode, langACode, langBCode, onEndDialog }) {
@@ -256,61 +258,46 @@ export default function DialogView({ mode, targetCode, langACode, langBCode, onE
 		stopSpeaking();
 		setError(null);
 
-		const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-		const recognition = new SR();
 		// In dialog mode use the current speaker's language code for accurate transcription.
 		// In single mode leave it empty so the browser auto-detects the source language.
-		recognition.lang = isDialogMode && speaker ? speaker.code : '';
-		recognition.continuous = false;
-		recognition.interimResults = false;
-		recognition.maxAlternatives = 1;
-
-		let finalTranscript = '';
-
-		recognition.onresult = (event) => {
-			for (let i = event.resultIndex; i < event.results.length; i++) {
-				if (event.results[i].isFinal) {
-					finalTranscript += event.results[i][0].transcript;
-				}
-			}
-		};
-
-		recognition.onerror = (event) => {
-			setIsListening(false);
-			if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-				setError({
-					message: 'Microphone access was not granted. Please allow microphone access or use text input.',
-					input: '',
-				});
-			} else if (event.error === 'no-speech') {
-				setError({
-					message: 'Nothing could be understood. Please speak more clearly or use text input.',
-					input: '',
-				});
-			} else if (event.error === 'network') {
-				setError({
-					message: 'No internet connection for speech recognition. Please check your connection.',
-					input: '',
-				});
-			} else if (event.error !== 'aborted') {
-				setError({ message: 'Speech recognition failed. Please use text input.', input: '' });
-			}
-		};
-
-		recognition.onend = () => {
-			setIsListening(false);
-			recognitionRef.current = null;
-			const spoken = finalTranscript.trim();
-			if (spoken) {
+		const recognition = createTimedSpeechRecognition({
+			langCode: isDialogMode && speaker ? speaker.code : '',
+			maxDurationMs: SPEECH_INPUT_MAX_DURATION_MS,
+			onResult: (spoken) => {
 				runTranslation(spoken);
-			}
-		};
+			},
+			onError: (event) => {
+				setIsListening(false);
+				if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+					setError({
+						message: 'Microphone access was not granted. Please allow microphone access or use text input.',
+						input: '',
+					});
+				} else if (event.error === 'no-speech') {
+					setError({
+						message: 'Nothing could be understood. Please speak more clearly or use text input.',
+						input: '',
+					});
+				} else if (event.error === 'network') {
+					setError({
+						message: 'No internet connection for speech recognition. Please check your connection.',
+						input: '',
+					});
+				} else if (event.error !== 'aborted') {
+					setError({ message: 'Speech recognition failed. Please use text input.', input: '' });
+				}
+			},
+			onEnd: () => {
+				setIsListening(false);
+				recognitionRef.current = null;
+			},
+		});
 
 		recognitionRef.current = recognition;
-		try {
-			recognition.start();
+		if (recognition.started) {
 			setIsListening(true);
-		} catch {
+		} else {
+			recognitionRef.current = null;
 			setIsListening(false);
 			setError({ message: 'Speech recognition could not be started. Please use text input.', input: '' });
 		}
@@ -530,7 +517,7 @@ export default function DialogView({ mode, targetCode, langACode, langBCode, onE
 						</button>
 						<p className="mt-2 text-sm font-semibold text-slate-700">
 							{isListening
-								? 'Listening …'
+								? 'Listening — up to 60 seconds …'
 								: isDialogMode && isTranslating
 								? 'Translating — please wait for your turn …'
 								: isDialogMode

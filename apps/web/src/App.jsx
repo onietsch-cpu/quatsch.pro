@@ -1,13 +1,26 @@
-import React, { useEffect } from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
 import { Route, Routes, BrowserRouter as Router } from 'react-router-dom';
 import ScrollToTop from './components/ScrollToTop';
 import Layout from './components/Layout';
-import HomePage from './pages/HomePage';
-import ConversationPage from './pages/ConversationPage';
-import HistoryPage from './pages/HistoryPage';
-import SettingsPage from './pages/SettingsPage';
 import { getSettings } from '@/lib/storage';
 import { checkApiHealth } from '@/lib/apiHealth';
+
+const HomePage = lazy(() => import('./pages/HomePage'));
+const ConversationPage = lazy(() => import('./pages/ConversationPage'));
+const HistoryPage = lazy(() => import('./pages/HistoryPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+
+function PageFallback() {
+	return (
+		<div className="flex min-h-[60dvh] items-center justify-center bg-slate-50 px-6 text-sm font-semibold text-slate-500">
+			Loading …
+		</div>
+	);
+}
+
+function withSuspense(page) {
+	return <Suspense fallback={<PageFallback />}>{page}</Suspense>;
+}
 
 function useThemeBootstrap() {
 	useEffect(() => {
@@ -52,10 +65,10 @@ function App() {
 			<ScrollToTop />
 			<Routes>
 				<Route element={<Layout />}>
-					<Route path="/" element={<HomePage />} />
-					<Route path="/conversation" element={<ConversationPage />} />
-					<Route path="/history" element={<HistoryPage />} />
-					<Route path="/settings" element={<SettingsPage />} />
+					<Route path="/" element={withSuspense(<HomePage />)} />
+					<Route path="/conversation" element={withSuspense(<ConversationPage />)} />
+					<Route path="/history" element={withSuspense(<HistoryPage />)} />
+					<Route path="/settings" element={withSuspense(<SettingsPage />)} />
 				</Route>
 			</Routes>
 		</Router>

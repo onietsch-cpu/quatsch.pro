@@ -1,5 +1,6 @@
 const DEFAULT_API_BASE_URL = 'https://api.openai.com/v1';
 const DEFAULT_MODEL = 'gpt-4.1-mini';
+const DEFAULT_TRANSCRIPTION_MODEL = 'whisper-1';
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MAX_RETRIES = 2;
 
@@ -28,6 +29,7 @@ export function getProviderConfig() {
 		apiKey,
 		apiBaseUrl,
 		model: process.env.OPENAI_TRANSLATION_MODEL || DEFAULT_MODEL,
+		transcriptionModel: process.env.OPENAI_TRANSCRIPTION_MODEL || DEFAULT_TRANSCRIPTION_MODEL,
 		ttsModel: process.env.OPENAI_TTS_MODEL || 'tts-1',
 	};
 }
@@ -82,6 +84,10 @@ function authHeaders(apiKey) {
 		Authorization: `Bearer ${apiKey}`,
 		'Content-Type': 'application/json',
 	};
+}
+
+function bearerHeaders(apiKey) {
+	return { Authorization: `Bearer ${apiKey}` };
 }
 
 function requireApiKey(config) {
@@ -150,4 +156,35 @@ export async function generateSpeech({ text, voice }) {
 			response_format: 'mp3',
 		}),
 	});
+}
+
+function audioExtension(mimeType) {
+	const normalized = String(mimeType || '').toLowerCase();
+	if (normalized.includes('mp4')) return 'm4a';
+	if (normalized.includes('mpeg') || normalized.includes('mp3')) return 'mp3';
+	if (normalized.includes('ogg')) return 'ogg';
+	if (normalized.includes('wav')) return 'wav';
+	return 'webm';
+}
+
+export async function transcribeAudio({ audioBuffer, mimeType = 'audio/webm', language = '' }) {
+	const config = getProviderConfig();
+	requireApiKey(config);
+
+	const form = new FormData();
+	const blob = new Blob([audioBuffer], { type: mimeType });
+	form.append('file', blob, `speech.${audioExtension(mimeType)}`);
+	form.append('model', config.transcriptionModel);
+	if (language) {
+		form.append('language', language);
+	}
+
+	const response = await request(`${config.apiBaseUrl}/audio/transcriptions`, {
+		method: 'POST',
+		headers: bearerHeaders(config.apiKey),
+		body: form,
+	});
+
+	const payload = await response.json();
+	return String(payload.text || '').trim();
 }

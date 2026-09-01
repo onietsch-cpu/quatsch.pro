@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import healthCheck from './health-check.js';
 import translate from './translate.js';
+import transcribe from './transcribe.js';
 import tts from './tts.js';
 import translateImage from './translate-image.js';
 import { botDetection } from '../middleware/bot-detection.js';
@@ -19,6 +20,7 @@ export default () => {
 	router.use(csrfCheck);
 
 	router.post('/translate', translateRateLimit, translate);
+	router.post('/transcribe', translateRateLimit, transcribe);
 	router.post('/tts', tts);
 	router.get('/tts', tts);
 	router.post('/translate-image', translateImageRateLimit, translateImage);
