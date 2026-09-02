@@ -383,6 +383,7 @@ export function createTimedSpeechRecognition({
 	let restartId = null;
 	let endPauseId = null;
 	let speechEndedAt = 0;
+	let lastTranscriptAt = 0;
 
 	const getFinalParts = () => [...finalParts.keys()]
 		.sort((a, b) => a - b)
@@ -409,9 +410,11 @@ export function createTimedSpeechRecognition({
 	};
 
 	const finishAfterPause = () => {
-		if (!pauseMs || !speechEndedAt || finished || manuallyStopped || !hasTranscript()) return;
+		if (!pauseMs || finished || manuallyStopped || !hasTranscript()) return;
+		const pauseStartedAt = speechEndedAt || lastTranscriptAt;
+		if (!pauseStartedAt) return;
 		clearEndPause();
-		const remainingPauseMs = Math.max(0, pauseMs - (Date.now() - speechEndedAt));
+		const remainingPauseMs = Math.max(0, pauseMs - (Date.now() - pauseStartedAt));
 		endPauseId = setTimeout(() => {
 			endPauseId = null;
 			if (finished || manuallyStopped || !hasTranscript()) return;
@@ -512,6 +515,8 @@ export function createTimedSpeechRecognition({
 				}
 			}
 			interimTranscript = nextInterim;
+			lastTranscriptAt = Date.now();
+			if (!speechEndedAt) finishAfterPause();
 			if (!isContinuous && receivedFinalResult) {
 				finishingForResult = true;
 				clearEndPause();
@@ -548,7 +553,6 @@ export function createTimedSpeechRecognition({
 				// Some browsers end a recognition session as soon as they emit a
 				// final fragment. Keep listening and preserve the configured pause
 				// window instead of translating that fragment immediately.
-				if (!speechEndedAt) speechEndedAt = Date.now();
 				finishAfterPause();
 				restart();
 				return;
