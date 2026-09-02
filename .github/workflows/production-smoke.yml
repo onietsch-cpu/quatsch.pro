@@ -76,7 +76,7 @@ jobs:
           assert_status "$status" "200" "/hcgi/api/health"
           jq -e '.status == "ok" and .aiProviderConfigured == true' "$workdir/api-health-body" >/dev/null
           rate_limit_policy="$(header_value ratelimit-policy "$workdir/api-health-headers")"
-          [[ "$rate_limit_policy" == *"10000"* && "$rate_limit_policy" == *"3600"* ]] || {
+          [[ "$rate_limit_policy" == "10000;w=3600" ]] || {
             echo "FAIL /hcgi/api/health: unexpected RateLimit-Policy $rate_limit_policy" >&2
             exit 1
           }
