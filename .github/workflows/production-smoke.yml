@@ -86,30 +86,30 @@ jobs:
 
           translation_source="Good morning, how are you today?"
           conversation_languages=(
-            "de-DE|German"
-            "en-US|English"
-            "vi-VN|Vietnamese"
-            "fr-FR|French"
-            "es-ES|Spanish"
-            "it-IT|Italian"
-            "pt-PT|Portuguese"
-            "nl-NL|Dutch"
-            "pl-PL|Polish"
-            "tr-TR|Turkish"
-            "ar-SA|Arabic"
-            "ru-RU|Russian"
-            "uk-UA|Ukrainian"
-            "zh-CN|Chinese"
-            "ja-JP|Japanese"
-            "ko-KR|Korean"
-            "th-TH|Thai"
-            "id-ID|Indonesian"
-            "hi-IN|Hindi"
+            "de-DE|German|Guten Morgen, wie geht es Ihnen heute?"
+            "en-US|English|Good morning, how are you today?"
+            "vi-VN|Vietnamese|Ch\\u00e0o bu\\u1ed5i s\\u00e1ng, h\\u00f4m nay b\\u1ea1n kh\\u1ecfe kh\\u00f4ng?"
+            "fr-FR|French|Bonjour, comment allez-vous aujourd'hui?"
+            "es-ES|Spanish|Buenos d\\u00edas, \\u00bfc\\u00f3mo est\\u00e1s hoy?"
+            "it-IT|Italian|Buongiorno, come stai oggi?"
+            "pt-PT|Portuguese|Bom dia, como voc\\u00ea est\\u00e1 hoje?"
+            "nl-NL|Dutch|Goedemorgen, hoe gaat het vandaag met u?"
+            "pl-PL|Polish|Dzie\\u0144 dobry, jak si\\u0119 dzisiaj masz?"
+            "tr-TR|Turkish|G\\u00fcnayd\\u0131n, bug\\u00fcn nas\\u0131ls\\u0131n\\u0131z?"
+            "ar-SA|Arabic|\\u0635\\u0628\\u0627\\u062d \\u0627\\u0644\\u062e\\u064a\\u0631\\u060c \\u0643\\u064a\\u0641 \\u062d\\u0627\\u0644\\u0643 \\u0627\\u0644\\u064a\\u0648\\u0645\\u061f"
+            "ru-RU|Russian|\\u0414\\u043e\\u0431\\u0440\\u043e\\u0435 \\u0443\\u0442\\u0440\\u043e, \\u043a\\u0430\\u043a \\u0432\\u044b \\u0441\\u0435\\u0431\\u044f \\u0447\\u0443\\u0432\\u0441\\u0442\\u0432\\u0443\\u0435\\u0442\\u0435 \\u0441\\u0435\\u0433\\u043e\\u0434\\u043d\\u044f?"
+            "uk-UA|Ukrainian|\\u0414\\u043e\\u0431\\u0440\\u043e\\u0433\\u043e \\u0440\\u0430\\u043d\\u043a\\u0443, \\u044f\\u043a \\u0432\\u0438 \\u0441\\u044c\\u043e\\u0433\\u043e\\u0434\\u043d\\u0456?"
+            "zh-CN|Chinese|\\u65e9\\u4e0a\\u597d\\uff0c\\u4f60\\u4eca\\u5929\\u597d\\u5417\\uff1f"
+            "ja-JP|Japanese|\\u304a\\u306f\\u3088\\u3046\\u3054\\u3056\\u3044\\u307e\\u3059\\u3002\\u4eca\\u65e5\\u306f\\u304a\\u5143\\u6c17\\u3067\\u3059\\u304b\\uff1f"
+            "ko-KR|Korean|\\uc88b\\uc740 \\uc544\\uce68\\uc785\\ub2c8\\ub2e4. \\uc624\\ub298 \\uc5b4\\ub5bb\\uac8c \\uc9c0\\ub0b4\\uc138\\uc694?"
+            "th-TH|Thai|\\u0e2a\\u0e27\\u0e31\\u0e2a\\u0e14\\u0e35\\u0e15\\u0e2d\\u0e19\\u0e40\\u0e0a\\u0e49\\u0e32 \\u0e27\\u0e31\\u0e19\\u0e19\\u0e35\\u0e49\\u0e04\\u0e38\\u0e13\\u0e40\\u0e1b\\u0e47\\u0e19\\u0e2d\\u0e22\\u0e48\\u0e32\\u0e07\\u0e44\\u0e23\\u0e1a\\u0e49\\u0e32\\u0e07"
+            "id-ID|Indonesian|Selamat pagi, apa kabar hari ini?"
+            "hi-IN|Hindi|\\u0938\\u0941\\u092a\\u094d\\u0930\\u092d\\u093e\\u0924, \\u0906\\u091c \\u0906\\u092a \\u0915\\u0948\\u0938\\u0947 \\u0939\\u0948\\u0902?"
           )
 
           for language in "${conversation_languages[@]}"; do
-            target_code="${language%%|*}"
-            target_name="${language#*|}"
+            IFS='|' read -r target_code target_name source_escaped <<< "$language"
+            printf -v source_text '%b' "$source_escaped"
             target_base="${target_code%%-*}"
             target_base="${target_base,,}"
             payload="$(jq -nc \
@@ -137,7 +137,36 @@ jobs:
               ((.translatedLanguageCode | ascii_downcase | split("-")[0]) == $target)
             ' "$workdir/translate-$target_code-body" >/dev/null
             translate_request_id="$(header_value x-request-id "$workdir/translate-$target_code-headers")"
-            echo "PASS $target_name translation${translate_request_id:+, request $translate_request_id}"
+            echo "PASS English to $target_name translation${translate_request_id:+, request $translate_request_id}"
+
+            if [[ "$target_base" != "en" ]]; then
+              reverse_payload="$(jq -nc \
+                --arg text "$source_text" \
+                --arg sourceCode "$target_code" \
+                --arg targetName "English" \
+                --arg targetCode "en-US" \
+                '{text: $text, sourceLanguageCode: $sourceCode, targetLanguageName: $targetName, targetLanguageCode: $targetCode}')"
+
+              reverse_status="$(curl --silent --show-error --compressed \
+                --connect-timeout 10 --max-time 60 \
+                --user-agent "quatsch.pro-production-smoke/1.0" \
+                --header "Content-Type: application/json" \
+                --header "X-Requested-With: XMLHttpRequest" \
+                --header "Origin: https://www.quatsch.pro" \
+                --data-binary "$reverse_payload" \
+                --dump-header "$workdir/reverse-$target_code-headers" \
+                --output "$workdir/reverse-$target_code-body" \
+                --write-out "%{http_code}" \
+                "https://www.quatsch.pro/hcgi/api/translate")"
+              assert_status "$reverse_status" "200" "/hcgi/api/translate ($target_name to English)"
+              jq -e --arg source "$target_base" '
+                (.translation | type == "string" and length > 0) and
+                ((.detectedLanguageCode | ascii_downcase | split("-")[0]) == $source) and
+                ((.translatedLanguageCode | ascii_downcase | split("-")[0]) == "en")
+              ' "$workdir/reverse-$target_code-body" >/dev/null
+              reverse_request_id="$(header_value x-request-id "$workdir/reverse-$target_code-headers")"
+              echo "PASS $target_name to English translation${reverse_request_id:+, request $reverse_request_id}"
+            fi
           done
 
           tts_status="$(curl --silent --show-error --compressed \
@@ -163,5 +192,5 @@ jobs:
           {
             echo '### Production smoke test'
             echo
-            echo 'All public production checks passed: domains, health, hardened 404 routes, the complete 19-language Conversation Mode translation matrix, and TTS.'
+            echo 'All public production checks passed: domains, health, hardened 404 routes, the complete bidirectional 19-language Conversation Mode translation matrix, and TTS.'
           } >> "$GITHUB_STEP_SUMMARY"
