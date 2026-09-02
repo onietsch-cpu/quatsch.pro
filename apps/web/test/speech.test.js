@@ -347,7 +347,7 @@ test('timed speech recognition can finish early and submit the current transcrip
 	assert.equal(captured, 'hallo, wie geht es dir');
 });
 
-test('timed speech recognition submits after the configured end-of-speech pause', async (t) => {
+test('timed speech recognition resets the pause window while transcript updates continue', async (t) => {
 	const originalWindow = global.window;
 	const instances = [];
 
@@ -375,7 +375,7 @@ test('timed speech recognition submits after the configured end-of-speech pause'
 	const ended = new Promise((resolve, reject) => {
 		const controller = createTimedSpeechRecognition({
 			maxDurationMs: 1_000,
-			endPauseMs: 5,
+			endPauseMs: 25,
 			onResult: (text) => {
 				captured = text;
 			},
@@ -395,12 +395,80 @@ test('timed speech recognition submits after the configured end-of-speech pause'
 		],
 	});
 	await new Promise((resolve) => setTimeout(resolve, 10));
-	assert.equal(instances[0].stopped, undefined, 'transcript updates alone do not imply silence');
+	assert.equal(instances[0].stopped, undefined);
+
+	instances[0].onresult({
+		resultIndex: 0,
+		results: [
+			{
+				0: { transcript: ' see you tomorrow morning ' },
+				isFinal: false,
+			},
+		],
+	});
+	await new Promise((resolve) => setTimeout(resolve, 10));
+	assert.equal(instances[0].stopped, undefined, 'new transcript activity resets the pause window');
 	instances[0].onspeechend();
 
 	await ended;
 	assert.equal(instances[0].stopped, true);
-	assert.equal(captured, 'see you tomorrow');
+	assert.equal(captured, 'see you tomorrow morning');
+});
+
+test('Vietnamese continuous recognition finishes after transcript inactivity without speech-end', async (t) => {
+	const originalWindow = global.window;
+	const instances = [];
+
+	class FakeRecognition {
+		start() {
+			instances.push(this);
+		}
+
+		stop() {
+			this.stopped = true;
+			this.onend?.();
+		}
+
+		abort() {
+			this.aborted = true;
+		}
+	}
+
+	global.window = { SpeechRecognition: FakeRecognition };
+	t.after(() => {
+		global.window = originalWindow;
+	});
+
+	let captured = '';
+	const ended = new Promise((resolve, reject) => {
+		createTimedSpeechRecognition({
+			langCode: 'vi-VN',
+			continuous: true,
+			maxDurationMs: 1_000,
+			endPauseMs: 15,
+			onResult: (text) => {
+				captured = text;
+			},
+			onError: reject,
+			onEnd: resolve,
+		});
+	});
+
+	assert.equal(instances[0].lang, 'vi-VN');
+	assert.equal(instances[0].continuous, true);
+	instances[0].onresult({
+		resultIndex: 0,
+		results: [
+			{
+				0: { transcript: ' xin chao, ban khoe khong ' },
+				isFinal: true,
+			},
+		],
+	});
+
+	await ended;
+	assert.equal(instances[0].stopped, true);
+	assert.equal(captured, 'xin chao, ban khoe khong');
 });
 
 test('timed speech recognition handles speech-end before a delayed transcript result', async (t) => {
