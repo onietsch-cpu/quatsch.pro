@@ -502,10 +502,12 @@ export function createTimedSpeechRecognition({
 		recognition.onresult = (event) => {
 			let nextInterim = '';
 			let receivedFinalResult = false;
+			let receivedTranscript = false;
 			for (let i = event.resultIndex; i < event.results.length; i += 1) {
 				const result = event.results[i];
 				const transcript = result?.[0]?.transcript?.trim();
 				if (!transcript) continue;
+				receivedTranscript = true;
 				if (result.isFinal) {
 					finalParts.set(i, transcript);
 					receivedFinalResult = true;
@@ -515,8 +517,10 @@ export function createTimedSpeechRecognition({
 				}
 			}
 			interimTranscript = nextInterim;
-			lastTranscriptAt = Date.now();
-			if (!speechEndedAt) finishAfterPause();
+			if (receivedTranscript) {
+				lastTranscriptAt = Date.now();
+				if (!speechEndedAt) finishAfterPause();
+			}
 			if (!isContinuous && receivedFinalResult) {
 				finishingForResult = true;
 				clearEndPause();
