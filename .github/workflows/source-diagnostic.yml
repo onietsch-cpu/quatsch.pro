@@ -1,0 +1,57 @@
+name: Public Lead Source Diagnostic
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/source-diagnostic.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Probe public data sources
+        shell: python
+        run: |
+          import json
+          import time
+          import urllib.parse
+          import urllib.request
+          import urllib.error
+
+          endpoints = [
+              'https://overpass-api.de/api/interpreter',
+              'https://overpass.kumi.systems/api/interpreter',
+              'https://overpass.private.coffee/api/interpreter',
+              'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+              'https://overpass.nchc.org.tw/api/interpreter',
+          ]
+          query='[out:json][timeout:30];nwr["contact:email"](51.500,-0.130,51.520,-0.090);out tags center 10;'
+          data=urllib.parse.urlencode({'data': query}).encode()
+          for endpoint in endpoints:
+              started=time.time()
+              try:
+                  req=urllib.request.Request(endpoint, data=data, headers={'User-Agent':'CustomerExpertsLeadResearch/1.0'})
+                  with urllib.request.urlopen(req, timeout=90) as response:
+                      payload=json.load(response)
+                  print('OVERPASS_OK', endpoint, len(payload.get('elements', [])), round(time.time()-started,2))
+              except Exception as exc:
+                  print('OVERPASS_FAIL', endpoint, type(exc).__name__, str(exc)[:300], round(time.time()-started,2))
+
+          for url in [
+              'https://directory.wispra.com/api/companies.json',
+              'https://download.geofabrik.de/europe/liechtenstein-latest.osm.pbf',
+          ]:
+              started=time.time()
+              try:
+                  req=urllib.request.Request(url, headers={'User-Agent':'CustomerExpertsLeadResearch/1.0','Range':'bytes=0-2047'})
+                  with urllib.request.urlopen(req, timeout=90) as response:
+                      body=response.read(2048)
+                      print('SOURCE_OK', url, response.status, response.headers.get('Content-Type'), len(body), round(time.time()-started,2))
+              except Exception as exc:
+                  print('SOURCE_FAIL', url, type(exc).__name__, str(exc)[:300], round(time.time()-started,2))
