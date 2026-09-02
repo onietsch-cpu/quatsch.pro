@@ -540,7 +540,20 @@ export function createTimedSpeechRecognition({
 		recognition.onend = () => {
 			if (finished || manuallyStopped) return;
 			detachRecognition();
-			if (hasTranscript() || finishingForResult || Date.now() >= deadline) {
+			if (finishingForResult || Date.now() >= deadline) {
+				finish();
+				return;
+			}
+			if (pauseMs && hasTranscript()) {
+				// Some browsers end a recognition session as soon as they emit a
+				// final fragment. Keep listening and preserve the configured pause
+				// window instead of translating that fragment immediately.
+				if (!speechEndedAt) speechEndedAt = Date.now();
+				finishAfterPause();
+				restart();
+				return;
+			}
+			if (hasTranscript()) {
 				finish();
 				return;
 			}
