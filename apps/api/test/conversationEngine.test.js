@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ConversationEngine, STATES } from '../../web/src/lib/conversationEngine.js';
+import { DIALOG_LANGUAGES } from '../../web/src/lib/languages.js';
 
 const LANG_A = { code: 'en-US', name: 'English', native: 'English' };
 const LANG_B = { code: 'de-DE', name: 'German', native: 'Deutsch' };
@@ -507,4 +508,46 @@ test('autoRead disabled finishes the turn without TTS and waits for next press',
 	assert.equal(ctx.calls.speak, 0, 'no TTS was invoked');
 	assert.equal(ctx.calls.recognize, 1, 'no auto-next recognition');
 	engine.end();
+});
+
+
+test('every Conversation Mode language follows the recognition, translation and TTS contract', async () => {
+	for (const language of DIALOG_LANGUAGES) {
+		const ctx = createMockAdapters();
+		const engine = new ConversationEngine({
+			langA: LANG_A,
+			langB: language,
+			autoRead: true,
+			rate: 1,
+			adapters: ctx.adapters,
+		});
+		engine.onState(() => {});
+		engine.start();
+		await waitFor(engine, (s) => s.state === STATES.AWAITING_TAP);
+
+		for (const direction of ['AtoB', 'BtoA']) {
+			const source = direction === 'AtoB' ? LANG_A : language;
+			const target = direction === 'AtoB' ? language : LANG_A;
+			engine.startListening(direction);
+			await waitFor(engine, (s) => s.state === STATES.LISTENING);
+			assert.equal(ctx.pending.recognize.langCode, source.code, `${language.name} ${direction} recognition`);
+
+			deliverResult(ctx, `sample in ${source.name}`);
+			await waitFor(engine, (s) => s.state === STATES.TRANSLATING);
+			assert.equal(ctx.pending.translate.params.sourceLanguageCode, source.code);
+			assert.equal(ctx.pending.translate.params.targetLanguageCode, target.code);
+			assert.equal(ctx.pending.translate.params.targetLanguageName, target.name);
+
+			resolveTranslate(ctx, {
+				translation: `sample in ${target.name}`,
+				detectedLanguageName: source.name,
+				detectedLanguageCode: source.code.split('-')[0],
+			});
+			await waitFor(engine, (s) => s.state === STATES.SPEAKING);
+			assert.equal(ctx.pending.speak.langCode, target.code, `${language.name} ${direction} TTS`);
+			finishSpeak(ctx);
+			await waitFor(engine, (s) => s.state === STATES.AWAITING_TAP);
+		}
+		engine.end();
+	}
 });
