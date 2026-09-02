@@ -75,6 +75,12 @@ jobs:
           status="$(get_request "https://www.quatsch.pro/hcgi/api/health" "$workdir/api-health-body" "$workdir/api-health-headers")"
           assert_status "$status" "200" "/hcgi/api/health"
           jq -e '.status == "ok" and .aiProviderConfigured == true' "$workdir/api-health-body" >/dev/null
+          rate_limit_policy="$(header_value ratelimit-policy "$workdir/api-health-headers")"
+          [[ "$rate_limit_policy" == "10000;w=3600" ]] || {
+            echo "FAIL /hcgi/api/health: unexpected RateLimit-Policy $rate_limit_policy" >&2
+            exit 1
+          }
+          echo "PASS API rate limit policy: $rate_limit_policy"
 
           for path in /.env /.git/config /wp-admin/install.php; do
             status="$(get_request "https://www.quatsch.pro$path" "$workdir/not-found-body" "$workdir/not-found-headers")"
