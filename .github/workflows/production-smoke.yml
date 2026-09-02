@@ -169,28 +169,38 @@ jobs:
             fi
           done
 
-          tts_status="$(curl --silent --show-error --compressed \
-            --connect-timeout 10 --max-time 60 \
-            --user-agent "quatsch.pro-production-smoke/1.0" \
-            --header "Content-Type: application/json" \
-            --header "X-Requested-With: XMLHttpRequest" \
-            --header "Origin: https://www.quatsch.pro" \
-            --data-binary '{"text":"Final production test successful.","langCode":"en-US"}' \
-            --dump-header "$workdir/tts-headers" --output "$workdir/tts-audio" \
-            --write-out "%{http_code}" \
-            "https://www.quatsch.pro/hcgi/api/tts")"
-          assert_status "$tts_status" "200" "/hcgi/api/tts"
-          tts_content_type="$(header_value content-type "$workdir/tts-headers")"
-          [[ "$tts_content_type" == audio/mpeg* ]] || { echo "FAIL TTS: unexpected Content-Type $tts_content_type" >&2; exit 1; }
-          cache_control="$(header_value cache-control "$workdir/tts-headers")"
-          [[ "$cache_control" == *private* && "$cache_control" == *no-store* ]] || { echo "FAIL TTS: unexpected Cache-Control $cache_control" >&2; exit 1; }
-          audio_bytes="$(wc -c < "$workdir/tts-audio")"
-          (( audio_bytes > 100 )) || { echo "FAIL TTS: audio response is empty" >&2; exit 1; }
-          tts_request_id="$(header_value x-request-id "$workdir/tts-headers")"
-          echo "PASS TTS: $audio_bytes bytes${tts_request_id:+, request $tts_request_id}"
+          for language in "${conversation_languages[@]}"; do
+            IFS='|' read -r tts_code tts_name tts_text_escaped <<< "$language"
+            printf -v tts_text '%b' "$tts_text_escaped"
+            tts_payload="$(jq -nc \
+              --arg text "$tts_text" \
+              --arg langCode "$tts_code" \
+              '{text: $text, langCode: $langCode}')"
+
+            tts_status="$(curl --silent --show-error --compressed \
+              --connect-timeout 10 --max-time 60 \
+              --user-agent "quatsch.pro-production-smoke/1.0" \
+              --header "Content-Type: application/json" \
+              --header "X-Requested-With: XMLHttpRequest" \
+              --header "Origin: https://www.quatsch.pro" \
+              --data-binary "$tts_payload" \
+              --dump-header "$workdir/tts-$tts_code-headers" \
+              --output "$workdir/tts-$tts_code-audio" \
+              --write-out "%{http_code}" \
+              "https://www.quatsch.pro/hcgi/api/tts")"
+            assert_status "$tts_status" "200" "/hcgi/api/tts ($tts_name)"
+            tts_content_type="$(header_value content-type "$workdir/tts-$tts_code-headers")"
+            [[ "$tts_content_type" == audio/mpeg* ]] || { echo "FAIL $tts_name TTS: unexpected Content-Type $tts_content_type" >&2; exit 1; }
+            cache_control="$(header_value cache-control "$workdir/tts-$tts_code-headers")"
+            [[ "$cache_control" == *private* && "$cache_control" == *no-store* ]] || { echo "FAIL $tts_name TTS: unexpected Cache-Control $cache_control" >&2; exit 1; }
+            audio_bytes="$(wc -c < "$workdir/tts-$tts_code-audio")"
+            (( audio_bytes > 100 )) || { echo "FAIL $tts_name TTS: audio response is empty" >&2; exit 1; }
+            tts_request_id="$(header_value x-request-id "$workdir/tts-$tts_code-headers")"
+            echo "PASS $tts_name TTS: $audio_bytes bytes${tts_request_id:+, request $tts_request_id}"
+          done
 
           {
             echo '### Production smoke test'
             echo
-            echo 'All public production checks passed: domains, health, hardened 404 routes, the complete bidirectional 19-language Conversation Mode translation matrix, and TTS.'
+            echo 'All public production checks passed: domains, health, hardened 404 routes, the complete bidirectional 19-language Conversation Mode translation and TTS matrices.'
           } >> "$GITHUB_STEP_SUMMARY"
