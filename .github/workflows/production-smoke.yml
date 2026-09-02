@@ -84,24 +84,61 @@ jobs:
             jq -e '.error == "Not found" and (keys == ["error"])' "$workdir/not-found-body" >/dev/null
           done
 
-          translate_status="$(curl --silent --show-error --compressed \
-            --connect-timeout 10 --max-time 60 \
-            --user-agent "quatsch.pro-production-smoke/1.0" \
-            --header "Content-Type: application/json" \
-            --header "X-Requested-With: XMLHttpRequest" \
-            --header "Origin: https://www.quatsch.pro" \
-            --data-binary '{"text":"Abschliessender Produktions-Funktionstest.","targetLanguageName":"English","targetLanguageCode":"en-US"}' \
-            --dump-header "$workdir/translate-headers" --output "$workdir/translate-body" \
-            --write-out "%{http_code}" \
-            "https://www.quatsch.pro/hcgi/api/translate")"
-          assert_status "$translate_status" "200" "/hcgi/api/translate"
-          jq -e '
-            (.translation | type == "string" and length > 0) and
-            (.detectedLanguageCode | ascii_downcase | startswith("de")) and
-            (.translatedLanguageCode | ascii_downcase | startswith("en"))
-          ' "$workdir/translate-body" >/dev/null
-          translate_request_id="$(header_value x-request-id "$workdir/translate-headers")"
-          echo "PASS translation payload${translate_request_id:+, request $translate_request_id}"
+          translation_source="Good morning, how are you today?"
+          conversation_languages=(
+            "de-DE|German"
+            "en-US|English"
+            "vi-VN|Vietnamese"
+            "fr-FR|French"
+            "es-ES|Spanish"
+            "it-IT|Italian"
+            "pt-PT|Portuguese"
+            "nl-NL|Dutch"
+            "pl-PL|Polish"
+            "tr-TR|Turkish"
+            "ar-SA|Arabic"
+            "ru-RU|Russian"
+            "uk-UA|Ukrainian"
+            "zh-CN|Chinese"
+            "ja-JP|Japanese"
+            "ko-KR|Korean"
+            "th-TH|Thai"
+            "id-ID|Indonesian"
+            "hi-IN|Hindi"
+          )
+
+          for language in "${conversation_languages[@]}"; do
+            target_code="${language%%|*}"
+            target_name="${language#*|}"
+            target_base="${target_code%%-*}"
+            target_base="${target_base,,}"
+            payload="$(jq -nc \
+              --arg text "$translation_source" \
+              --arg sourceCode "en-US" \
+              --arg targetName "$target_name" \
+              --arg targetCode "$target_code" \
+              '{text: $text, sourceLanguageCode: $sourceCode, targetLanguageName: $targetName, targetLanguageCode: $targetCode}')"
+
+            translate_status="$(curl --silent --show-error --compressed \
+              --connect-timeout 10 --max-time 60 \
+              --user-agent "quatsch.pro-production-smoke/1.0" \
+              --header "Content-Type: application/json" \
+              --header "X-Requested-With: XMLHttpRequest" \
+              --header "Origin: https://www.quatsch.pro" \
+              --data-binary "$payload" \
+              --dump-header "$workdir/translate-$target_code-headers" \
+              --output "$workdir/translate-$target_code-body" \
+              --write-out "%{http_code}" \
+              "https://www.quatsch.pro/hcgi/api/translate")"
+            assert_status "$translate_status" "200" "/hcgi/api/translate ($target_name)"
+            jq -e --arg target "$target_base" '
+              (.translation | type == "string" and length > 0) and
+              (.detectedLanguageCode | ascii_downcase | startswith("en")) and
+              ((.translatedLanguageCode | ascii_downcase | split("-")[0]) == $target)
+            ' "$workdir/translate-$target_code-body" >/dev/null
+            translate_request_id="$(header_value x-request-id "$workdir/translate-$target_code-headers")"
+            echo "PASS $target_name translation${translate_request_id:+, request $translate_request_id}"
+          done
 
           tts_status="$(curl --silent --show-error --compressed \
             --connect-timeout 10 --max-time 60 \
@@ -126,5 +163,5 @@ jobs:
           {
             echo '### Production smoke test'
             echo
-            echo 'All public production checks passed: domains, health, hardened 404 routes, translation, and TTS.'
+            echo 'All public production checks passed: domains, health, hardened 404 routes, the complete 19-language Conversation Mode translation matrix, and TTS.'
           } >> "$GITHUB_STEP_SUMMARY"
