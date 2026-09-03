@@ -18,7 +18,7 @@ const SPONSORS = [
 	{
 		name: 'nurx.com',
 		subtitle: 'Get weight management treatment for as low as $0 with insurance',
-		url: 'https://api.adindex.com/v1/redirect?advertiserId=11EE9038E2B36F6284AA14DDA9D518B0&adspaceId=11F1A2D383B6DABDBBD014DDA9D518B0',
+		url: 'https://api.adindex.com/v2/redirect/product?id=ac1a8d33-b939-4bcc-a6f6-a834acd1224d&adspaceId=11F1A2D383B6DABDBBD014DDA9D518B0',
 	},
 	{
 		name: 'deutschland.money',
