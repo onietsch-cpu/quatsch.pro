@@ -1,0 +1,64 @@
+name: English-Market Lead Supplement
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/english-lead-supplement.yml'
+      - 'english_lead_supplement.py.gz.b64'
+  workflow_dispatch:
+
+concurrency:
+  group: english-market-lead-supplement
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Check out supplement branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq osmium-tool
+          python -m pip install --upgrade requests dnspython
+
+      - name: Restore collectors
+        run: |
+          curl -L --fail --retry 3 -o geofabrik_lead_research.py.gz.b64 \
+            https://raw.githubusercontent.com/onietsch-cpu/quatsch.pro/lead-research-20260824/geofabrik_lead_research.py.gz.b64
+          base64 --decode geofabrik_lead_research.py.gz.b64 | gzip --decompress > geofabrik_lead_research.py
+          base64 --decode english_lead_supplement.py.gz.b64 | gzip --decompress > english_lead_supplement.py
+          python -m py_compile geofabrik_lead_research.py english_lead_supplement.py
+
+      - name: Collect balanced English-market contacts
+        run: python english_lead_supplement.py --output output
+
+      - name: Package result
+        if: always()
+        run: |
+          mkdir -p artifact
+          cp -r output/. artifact/ 2>/dev/null || true
+          cp english_lead_supplement.py artifact/
+          printf '%s\n' "Public business contacts only. Recheck every source before outreach." > artifact/LEGAL_AND_QUALITY_NOTICE.txt
+
+      - name: Upload supplement
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: english-market-app-leads-4500
+          path: artifact
+          if-no-files-found: error
+          retention-days: 7
