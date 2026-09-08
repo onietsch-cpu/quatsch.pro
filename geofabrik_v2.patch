@@ -1,0 +1,151 @@
+--- geofabrik_lead_research.py
++++ geofabrik_lead_research.py
+@@ -130,7 +130,17 @@
+     "NA": "Namibia", "ZW": "Zimbabwe", "ZM": "Zambia", "UG": "Uganda",
+     "RW": "Rwanda", "MW": "Malawi", "SZ": "Eswatini", "LS": "Lesotho",
+ }
+-COUNTRY_ALIASES = {"UK": "GB", "EL": "GR"}
++COUNTRY_ALIASES = {
++    "UK": "GB", "EL": "GR", "SL": "SI",
++    "GERMANY": "DE", "DEUTSCHLAND": "DE", "AUSTRIA": "AT",
++    "SWITZERLAND": "CH", "SCHWEIZ": "CH", "UNITED KINGDOM": "GB",
++    "GREAT BRITAIN": "GB", "ENGLAND": "GB", "SCOTLAND": "GB",
++    "WALES": "GB", "NORTHERN IRELAND": "GB", "UNITED STATES": "US",
++    "UNITED STATES OF AMERICA": "US", "USA": "US", "CANADA": "CA",
++    "AUSTRALIA": "AU", "NEW ZEALAND": "NZ", "IRELAND": "IE",
++    "PALESTINE": "PS", "STATE OF PALESTINE": "PS",
++    "SLOVENIA": "SI", "CZECH REPUBLIC": "CZ", "CZECHIA": "CZ",
++}
+ 
+ ENGLISH_FOCUS = {"US", "GB", "CA", "AU", "NZ", "IE", "ZA", "SG", "MT", "IN", "BZ", "GY"}
+ DACH = {"DE", "AT", "CH", "LI"}
+@@ -149,7 +159,7 @@
+ COUNTRY_CAPS = defaultdict(lambda: 350)
+ COUNTRY_CAPS.update({
+     "US": 1900, "GB": 1600, "CA": 850, "AU": 750, "NZ": 350,
+-    "IE": 300, "ZA": 300, "SG": 150, "MT": 100,
++    "IE": 300, "ZA": 300, "SG": 150, "MT": 100, "BZ": 100, "GY": 100,
+     "DE": 1050, "CH": 300, "AT": 300, "LI": 120,
+     "BE": 350, "NL": 350, "DK": 200, "LU": 150, "EE": 100,
+     "LV": 100, "LT": 100, "SI": 120, "HR": 120, "CZ": 150,
+@@ -321,6 +331,37 @@
+     for code, label, path in rest:
+         groups["Rest of world"].append(ex(code, label, code, "Rest of world", path))
+ 
++    # Interleave countries within the large market groups. This prevents the
++    # first dense country (previously the UK and Germany) from filling an entire
++    # quota before the USA, Canada, Australia, Austria and Switzerland are read.
++    def interleave_by_country(specs: list[ExtractSpec], country_order: list[str]) -> list[ExtractSpec]:
++        buckets: dict[str, list[ExtractSpec]] = defaultdict(list)
++        for item in specs:
++            buckets[item.country_code].append(item)
++        result: list[ExtractSpec] = []
++        while any(buckets.values()):
++            progress = False
++            for country in country_order:
++                if buckets.get(country):
++                    result.append(buckets[country].pop(0))
++                    progress = True
++            for country in sorted(buckets):
++                if country not in country_order and buckets[country]:
++                    result.append(buckets[country].pop(0))
++                    progress = True
++            if not progress:
++                break
++        return result
++
++    # Defer the comparatively large South Africa extract until the principal
++    # English-speaking markets have been sampled.
++    english_primary = [item for item in groups["English-speaking focus"] if item.country_code != "ZA"]
++    english_deferred = [item for item in groups["English-speaking focus"] if item.country_code == "ZA"]
++    groups["English-speaking focus"] = interleave_by_country(
++        english_primary, ["GB", "US", "CA", "AU", "NZ", "IE", "MT", "BZ", "GY"]
++    ) + english_deferred
++    groups["DACH"] = interleave_by_country(groups["DACH"], ["LI", "AT", "CH", "DE"])
++
+     # Round-robin market groups so coverage stays balanced even if enough data is
+     # collected before every extract is processed.
+     ordered: list[ExtractSpec] = []
+@@ -470,9 +511,17 @@
+     line1 = full or " ".join(x for x in [street, house] if x).strip()
+     city = clean_text(tags.get("addr:city")) or clean_text(tags.get("addr:town")) or clean_text(tags.get("addr:village")) or clean_text(tags.get("addr:municipality"))
+     postcode = clean_text(tags.get("addr:postcode"))
+-    state = clean_text(tags.get("addr:state")) or clean_text(tags.get("addr:province")) or spec.label
+-    raw_country = clean_text(tags.get("addr:country")).upper()
+-    country_code = COUNTRY_ALIASES.get(raw_country, raw_country) if raw_country else spec.country_code
++    state = clean_text(tags.get("addr:state")) or clean_text(tags.get("addr:province"))
++    raw_country = clean_text(tags.get("addr:country")).strip().upper()
++    if raw_country:
++        if raw_country in COUNTRY_ALIASES:
++            country_code = COUNTRY_ALIASES[raw_country]
++        elif re.fullmatch(r"[A-Z]{2}", raw_country):
++            country_code = raw_country
++        else:
++            country_code = spec.country_code
++    else:
++        country_code = spec.country_code
+     country = COUNTRY_NAMES.get(country_code, country_code or spec.label)
+     full_parts = [line1, " ".join(x for x in [postcode, city] if x).strip(), state, country]
+     return {
+@@ -536,7 +585,9 @@
+     phone = clean_text(tags.get("contact:phone")) or clean_text(tags.get("phone")) or clean_text(tags.get("contact:mobile")) or clean_text(tags.get("mobile"))
+     address = address_from_tags(tags, spec)
+     lat, lon = geometry_center(feature.get("geometry"))
+-    if not (address["Address"] or address["City"] or address["Postal_Code"] or (lat and lon)):
++    # The requested deliverable is an address list. Coordinates alone are not
++    # sufficient; retain only businesses with a public street/full address.
++    if not address["Address"]:
+         return None
+     industry, app_idea, base_score = classify(tags, name)
+     e_type = email_type(email)
+@@ -899,14 +950,44 @@
+ 
+ def coverage_sufficient(leads: list[dict[str, Any]], target: int) -> bool:
+     unique = dedupe(leads)
+-    counts = Counter(lead["Market_Group"] for lead in unique)
+-    required = {
+-        "English-speaking focus": round(target * 0.72),
+-        "DACH": round(target * 0.18),
++    group_counts = Counter(lead["Market_Group"] for lead in unique)
++    country_counts = Counter(lead.get("Country_Code", "") for lead in unique)
++    countries_by_group: dict[str, set[str]] = defaultdict(set)
++    for lead in unique:
++        if lead.get("Country_Code"):
++            countries_by_group[lead["Market_Group"]].add(lead["Country_Code"])
++
++    required_groups = {
++        "English-speaking focus": round(target * 0.75),
++        "DACH": round(target * 0.20),
+         "Europe other": round(target * 0.18),
+-        "Rest of world": round(target * 0.10),
++        "Rest of world": round(target * 0.12),
+     }
+-    return len(unique) >= round(target * 1.45) and all(counts[group] >= needed for group, needed in required.items())
++    if len(unique) < round(target * 1.55):
++        return False
++    if not all(group_counts[group] >= needed for group, needed in required_groups.items()):
++        return False
++
++    # Minimum raw pools for the main English-speaking markets. These are below
++    # the final caps but high enough to survive MX filtering and keep the list
++    # from becoming a single-country UK dataset.
++    english_minimums = {
++        "GB": 1500, "US": 1800, "CA": 750, "AU": 650,
++        "NZ": 220, "IE": 220,
++    }
++    if not all(country_counts[country] >= minimum for country, minimum in english_minimums.items()):
++        return False
++
++    # Ensure DACH is more than Germany alone and the remaining groups are broad.
++    if country_counts["DE"] < 1050 or country_counts["AT"] < 250 or country_counts["CH"] < 250:
++        return False
++    if len(countries_by_group["English-speaking focus"]) < 7:
++        return False
++    if len(countries_by_group["Europe other"]) < 8:
++        return False
++    if len(countries_by_group["Rest of world"]) < 8:
++        return False
++    return True
+ 
+ 
+ def main() -> int:
