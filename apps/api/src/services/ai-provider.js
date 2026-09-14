@@ -46,17 +46,20 @@ function retryDelay(attempt, retryAfter) {
 	return Math.min(400 * (2 ** attempt) + Math.floor(Math.random() * 150), 3_000);
 }
 
-async function request(url, options, attempt = 0) {
+async function request(url, options, attempt = 0, {
+	timeoutMs = Number(process.env.AI_REQUEST_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS,
+	maxRetries = MAX_RETRIES,
+} = {}) {
 	let response;
 	try {
 		response = await fetch(url, {
 			...options,
-			signal: AbortSignal.timeout(Number(process.env.AI_REQUEST_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS),
+			signal: AbortSignal.timeout(timeoutMs),
 		});
 	} catch (error) {
-		if (attempt < MAX_RETRIES && (error.name === 'TimeoutError' || error.name === 'TypeError')) {
+		if (attempt < maxRetries && (error.name === 'TimeoutError' || error.name === 'TypeError')) {
 			await new Promise((resolve) => setTimeout(resolve, retryDelay(attempt)));
-			return request(url, options, attempt + 1);
+			return request(url, options, attempt + 1, { timeoutMs, maxRetries });
 		}
 		throw new UpstreamError('The AI provider could not be reached.', { status: 503, retryable: true });
 	}
@@ -66,9 +69,9 @@ async function request(url, options, attempt = 0) {
 	}
 
 	const retryable = response.status === 429 || response.status >= 500;
-	if (retryable && attempt < MAX_RETRIES) {
+	if (retryable && attempt < maxRetries) {
 		await new Promise((resolve) => setTimeout(resolve, retryDelay(attempt, response.headers.get('retry-after'))));
-		return request(url, options, attempt + 1);
+		return request(url, options, attempt + 1, { timeoutMs, maxRetries });
 	}
 
 	const body = await response.text().catch(() => '');
@@ -112,7 +115,7 @@ export function parseJsonContent(raw) {
 	}
 }
 
-export async function generateJson({ systemPrompt, userPrompt, imageDataUrl }) {
+export async function generateJson({ systemPrompt, userPrompt, imageDataUrl, maxTokens = 300, timeoutMs, maxRetries }) {
 	const config = getProviderConfig();
 	requireApiKey(config);
 
@@ -134,12 +137,16 @@ export async function generateJson({ systemPrompt, userPrompt, imageDataUrl }) {
 			],
 			response_format: { type: 'json_object' },
 			temperature: 0,
-			max_tokens: 300,
+			max_tokens: maxTokens,
 		}),
-	});
+	}, 0, { timeoutMs, maxRetries });
 
 	const payload = await response.json();
-	return parseJsonContent(payload.choices?.[0]?.message?.content);
+	const choice = payload.choices?.[0];
+	if (choice?.finish_reason === 'length') {
+		throw new UpstreamError('The text exceeds the output limit. Please split it into smaller sections.', { status: 422 });
+	}
+	return parseJsonContent(choice?.message?.content);
 }
 
 export async function generateSpeech({ text, voice }) {

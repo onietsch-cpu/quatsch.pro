@@ -139,6 +139,7 @@ export default function PhotoTranslator({ targetCode, targetName, settings }) {
 				<ImageIcon className="h-5 w-5 text-[#1976D2]" />
 				<h3 className="text-base font-bold text-slate-900">Photo Translator</h3>
 			</div>
+			<p className="text-sm text-slate-600">Upload screenshots with long text, menus or documents. We translate the full readable text, including paragraphs. JPG, PNG or WebP, up to 8 MB.</p>
 
 			{/* Upload buttons */}
 			{!preview && (
@@ -211,7 +212,7 @@ export default function PhotoTranslator({ targetCode, targetName, settings }) {
 			{isTranslating && (
 				<div className="flex items-center gap-2 rounded-xl bg-blue-50 px-4 py-3 text-sm font-medium text-[#1976D2]">
 					<Loader2 className="h-4 w-4 animate-spin" />
-					Recognizing text and translating …
+					Recognizing and translating the full text … Long screenshots can take up to two minutes.
 				</div>
 			)}
 
@@ -245,7 +246,7 @@ export default function PhotoTranslator({ targetCode, targetName, settings }) {
 							<p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
 								Recognized text · {result.detectedLanguageName}
 							</p>
-							<p className="text-sm text-slate-700 leading-relaxed">{result.extractedText}</p>
+							<p className="whitespace-pre-wrap break-words text-sm text-slate-700 leading-relaxed">{result.extractedText}</p>
 						</div>
 					)}
 					{result.translation ? (
@@ -253,7 +254,7 @@ export default function PhotoTranslator({ targetCode, targetName, settings }) {
 							<p className="mb-1 text-xs font-semibold uppercase tracking-wide text-teal-500">
 								Translation · {targetName}
 							</p>
-							<p className="text-base font-semibold text-slate-900 leading-relaxed">{result.translation}</p>
+							<p className="whitespace-pre-wrap break-words text-base font-semibold text-slate-900 leading-relaxed">{result.translation}</p>
 						</div>
 					) : (
 						<p className="text-sm text-slate-400 text-center py-2">No text found in the image.</p>

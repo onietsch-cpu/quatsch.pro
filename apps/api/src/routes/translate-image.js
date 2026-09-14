@@ -1,9 +1,9 @@
 import logger from '../utils/logger.js';
-import { generateJson } from '../services/ai-provider.js';
+import { generateJson, UpstreamError } from '../services/ai-provider.js';
 
 const MAX_SIZE_BYTES = 8 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
-const SYSTEM_PROMPT = `You are an OCR and translation engine. Extract all visible text from the supplied image, preserving sensible line breaks, and translate it into the requested target language. Return only JSON with this exact shape: {"extractedText":"all visible text","translation":"translated text","detectedLanguageName":"English language name"}. If there is no text, return empty strings for extractedText and translation.`;
+const SYSTEM_PROMPT = `You are an OCR and translation engine. Extract all visible text from the supplied image, preserving paragraphs, reading order and line breaks, and translate the entire text into the requested target language. Screenshots may contain many paragraphs: include every readable section through the final line. Do not summarize, shorten or omit text. Return only JSON with this exact shape: {"extractedText":"all visible text","translation":"translated text","detectedLanguageName":"English language name"}. If there is no text, return empty strings for extractedText and translation.`;
 
 export default async (req, res) => {
 	const { image, mimeType, targetLanguageName, _hp } = req.body || {};
@@ -39,7 +39,15 @@ export default async (req, res) => {
 		systemPrompt: SYSTEM_PROMPT,
 		userPrompt: `Target language: ${targetLanguageName}`,
 		imageDataUrl: `data:${mimeType};base64,${image}`,
+		maxTokens: 16_384,
+		timeoutMs: 120_000,
+		maxRetries: 0,
 	});
+
+	if (typeof result.extractedText !== 'string' || typeof result.translation !== 'string' ||
+		(result.extractedText.trim() && !result.translation.trim())) {
+		throw new UpstreamError('The image translation was incomplete.', { status: 502 });
+	}
 
 	res.json({
 		extractedText: typeof result.extractedText === 'string' ? result.extractedText : '',
