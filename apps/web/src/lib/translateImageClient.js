@@ -42,7 +42,7 @@ export async function translateImage({ file, targetLanguageName, honeypot = '' }
 			targetLanguageName,
 			_hp: honeypot,
 		}),
-	});
+	}, { attempts: 1 });
 
 	if (!response.ok) {
 		const err = await response.json().catch(() => ({}));
