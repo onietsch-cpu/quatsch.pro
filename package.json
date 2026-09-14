@@ -18,5 +18,8 @@
   "workspaces": [
     "apps/api",
     "apps/web"
-  ]
+  ],
+  "overrides": {
+    "esbuild": "^0.28.1"
+  }
 }

@@ -109,6 +109,7 @@ export class ConversationEngine {
 	_snapshot() {
 		return {
 			state: this.state,
+			hasRecording: Boolean(this._recognizer),
 			direction: this.direction,
 			error: this.error,
 			lastEntry: this.lastEntry,
@@ -215,7 +216,15 @@ export class ConversationEngine {
 		}
 	}
 
+	holdRecording() { if (this.state === STATES.LISTENING || this.state === STATES.PAUSED) this._recognizer?.hold?.(); }
+	finishRecording() {
+		if (this.state !== STATES.LISTENING && this.state !== STATES.PAUSED) return;
+		this._recognizer?.finish?.();
+	}
 	pause() {
+		if (this.state === STATES.LISTENING && this._recognizer?.pause) {
+			this._recognizer.pause(); this._setState(STATES.PAUSED); return;
+		}
 		if (
 			this.state !== STATES.LISTENING &&
 			this.state !== STATES.TRANSLATING &&
@@ -224,12 +233,14 @@ export class ConversationEngine {
 		) {
 			return;
 		}
+		this._bump();
 		this._stopAll();
 		this._setState(STATES.PAUSED);
 	}
 
 	resume() {
 		if (this.state !== STATES.PAUSED) return;
+		if (this._recognizer?.resume) { this._recognizer.resume(); this._setState(STATES.LISTENING); return; }
 		this.error = null;
 		// Resume waits for an explicit button press too — no auto-listening.
 		this._setState(STATES.AWAITING_TAP);
@@ -239,6 +250,7 @@ export class ConversationEngine {
 	// while waiting for a button press (or paused / error), so it can never
 	// interrupt an active turn.
 	switchDirection() {
+		if (this._recognizer) return;
 		if (
 			this.state !== STATES.AWAITING_TAP &&
 			this.state !== STATES.ERROR &&
@@ -271,6 +283,7 @@ export class ConversationEngine {
 	}
 
 	submitText(text) {
+		if (this._recognizer) return;
 		const trimmed = String(text || '').trim();
 		if (!trimmed) return;
 		// Only accept typed input when waiting for a button press (no active
@@ -295,6 +308,7 @@ export class ConversationEngine {
 	}
 
 	end() {
+		this._bump();
 		this._stopAll();
 		this.history = [];
 		this.lastEntry = null;
@@ -360,6 +374,8 @@ export class ConversationEngine {
 		if (code === 'not-allowed' || code === 'service-not-allowed') {
 			message =
 				'Microphone access was not granted. Please allow microphone access or use text input.';
+		} else if (code === 'too-large') {
+			message = 'Recording exceeds 8 MB. Please record a shorter section.';
 		} else if (code === 'no-speech') {
 			message = 'Nothing could be understood. Please speak more clearly or try again.';
 		} else if (code === 'network') {

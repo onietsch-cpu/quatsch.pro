@@ -23,6 +23,7 @@ function isValidSession(session) {
 
 export default function HomePage() {
 	// 'start' | 'select' | 'dialog'
+	const [inputTab, setInputTab] = useState('speak');
 	const [stage, setStage] = useState('start');
 	const [session, setSession] = useState(null);
 
@@ -39,7 +40,7 @@ export default function HomePage() {
 		}
 	}, []);
 
-	const handleStart = useCallback(() => setStage('select'), []);
+	const handleStart = useCallback((tab) => { setInputTab(tab === 'photo' ? 'photo' : 'speak'); setStage('select'); }, []);
 
 	const handleConfirmLanguage = useCallback((selection) => {
 		if (!isValidSession(selection)) return;
@@ -81,7 +82,7 @@ export default function HomePage() {
 					<LanguageSelector onConfirm={handleConfirmLanguage} onCancel={handleCancelSelect} forceMode="single" />
 				)}
 				{stage === 'dialog' && session && (
-					<DialogView key={session.targetCode} mode="single" targetCode={session.targetCode} onEndDialog={handleEndDialog} />
+					<DialogView initialInputTab={inputTab} key={session.targetCode} mode="single" targetCode={session.targetCode} onEndDialog={handleEndDialog} />
 				)}
 			</Suspense>
 		</>

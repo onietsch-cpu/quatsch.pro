@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
 import { ArrowRight, ShieldCheck, ExternalLink } from 'lucide-react';
 import InstallButton from '@/components/InstallButton';
 import { ackPrivacy, hasAckedPrivacy } from '@/lib/storage';
@@ -21,9 +20,10 @@ const SPONSORS = [
 		url: 'https://api.adindex.com/v1/redirect?advertiserId=11EE9038E2B36F6284AA14DDA9D518B0&adspaceId=11F1A2D383B6DABDBBD014DDA9D518B0',
 	},
 	{
-		name: 'Autodoc.de',
-		subtitle: 'Car parts, accessories and maintenance products',
-		url: 'https://api.adindex.com/v1/redirect?advertiserId=11EE3B5284DAAA0D89DA14DDA9D518B0&adspaceId=11F1A2D383B6DABDBBD014DDA9D518B0',
+		name: 'World Businesses for Sale',
+		image: 'https://www.awin1.com/cshow.php?s=3960274&v=116725&q=520967&r=3062055',
+		subtitle: 'Explore businesses for sale around the world',
+		url: 'https://www.awin1.com/cread.php?s=3960274&v=116725&q=520967&r=3062055',
 	},
 	{
 		name: 'deutschland.money',
@@ -41,10 +41,7 @@ export default function StartScreen({ onStart }) {
 
 	return (
 		<div className="flex min-h-[100dvh] flex-col items-center justify-start bg-gradient-to-b from-[#EAF2FB] via-white to-[#EAF2FB] px-6 pb-16 pt-10 sm:pt-12">
-			<motion.div
-				initial={{ opacity: 0, y: 24 }}
-				animate={{ opacity: 1, y: 0 }}
-				transition={{ duration: 0.6, ease: 'easeOut' }}
+			<div
 				className="w-full max-w-md text-center"
 			>
 				<div className="mx-auto mb-8">
@@ -65,15 +62,15 @@ export default function StartScreen({ onStart }) {
 					source language.
 				</p>
 
-				<motion.button
-					whileTap={{ scale: 0.97 }}
+				<button
 					onClick={onStart}
 					className="mt-10 inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-[#1976D2] px-8 py-5 text-lg font-bold text-white shadow-lg shadow-[#1976D2]/20 transition-colors hover:bg-[#0B1F3A] active:bg-[#0B1F3A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0B1F3A]"
 				>
 					Start translation
 					<ArrowRight className="h-6 w-6" aria-hidden="true" />
-				</motion.button>
+				</button>
 
+				<button onClick={() => onStart('photo')} className="mt-4 w-full rounded-2xl border-2 border-teal-500 bg-teal-50 px-6 py-5 text-lg font-bold text-teal-800">Translate a photo<span className="mt-1 block text-sm font-normal">Menus, signs and documents — take a photo or upload one</span></button>
 				<InstallButton className="mt-4 w-full" />
 
 				<div className="mt-10 text-left">
@@ -94,6 +91,7 @@ export default function StartScreen({ onStart }) {
 								>
 									<span>
 										<span className="block text-sm font-bold text-[#0B1F3A]">{s.name}</span>
+										{s.image && <img src={s.image} alt="World Businesses for Sale" loading="lazy" decoding="async" className="mt-2 h-24 w-full object-contain" />}
 										<span className="block text-xs text-slate-500">{s.subtitle}</span>
 									</span>
 									<ExternalLink className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
@@ -121,7 +119,7 @@ export default function StartScreen({ onStart }) {
 						</div>
 					</div>
 				)}
-			</motion.div>
+			</div>
 		</div>
 	);
 }

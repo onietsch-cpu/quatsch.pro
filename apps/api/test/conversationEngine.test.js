@@ -551,3 +551,21 @@ test('every Conversation Mode language follows the recognition, translation and 
 		engine.end();
 	}
 });
+
+test('manual recorder pause and resume preserve capture until explicit translation', async () => {
+	let callbacks; let paused = 0, resumed = 0, stopped = 0, translated = 0;
+	const engine = new ConversationEngine({
+		langA: { code: 'de-DE', name: 'German' }, langB: { code: 'en-US', name: 'English' }, autoRead: false,
+		adapters: {
+			recognize(opts) { callbacks = opts; return { pause() { paused++; }, resume() { resumed++; }, stop() { stopped++; }, finish() { callbacks.onResult('Hallo'); } }; },
+			async translate() { translated++; return { translation: 'Hello' }; },
+		},
+	});
+	engine.start(); engine.startListening('AtoB'); engine.pause();
+	assert.equal(paused, 1); assert.equal(stopped, 0); assert.equal(translated, 0);
+	engine.switchDirection(); assert.equal(engine.direction, 'AtoB');
+	engine.resume(); assert.equal(resumed, 1); assert.equal(translated, 0);
+	engine.finishRecording(); await new Promise((resolve) => setImmediate(resolve));
+	assert.equal(translated, 1); assert.equal(engine.history[0].translation, 'Hello');
+	engine.end();
+});
