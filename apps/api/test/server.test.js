@@ -97,5 +97,6 @@ test('security policy rejects inline scripts and embedding, and request IDs are 
 	assert.match(csp, /script-src 'self';/);
 	assert.match(csp, /frame-ancestors 'none'/);
 	assert.match(csp, /object-src 'none'/);
+	assert.ok(csp.includes('https://a1.awin1.com'));
 	assert.equal(response.headers.get('x-request-id').length, 36);
 });

@@ -38,7 +38,7 @@ export function createApp() {
 		contentSecurityPolicy: { directives: {
 			defaultSrc: ["'self'"], scriptSrc: ["'self'"],
 			styleSrc: ["'self'", "'unsafe-inline'"],
-			imgSrc: ["'self'", 'data:', 'blob:', 'https://www.awin1.com'],
+			imgSrc: ["'self'", 'data:', 'blob:', 'https://www.awin1.com', 'https://a1.awin1.com'],
 			fontSrc: ["'self'"], connectSrc: ["'self'"], mediaSrc: ["'self'", 'blob:'],
 			objectSrc: ["'none'"], frameAncestors: ["'none'"], baseUri: ["'self'"],
 			formAction: ["'self'"], upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,

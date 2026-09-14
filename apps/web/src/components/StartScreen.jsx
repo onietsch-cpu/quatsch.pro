@@ -91,7 +91,7 @@ export default function StartScreen({ onStart }) {
 								>
 									<span>
 										<span className="block text-sm font-bold text-[#0B1F3A]">{s.name}</span>
-										{s.image && <img src={s.image} alt="World Businesses for Sale" loading="lazy" decoding="async" className="mt-2 h-24 w-full object-contain" />}
+										{s.image && <img src={s.image} alt="World Businesses for Sale" loading="lazy" decoding="async" width="336" height="280" className="mt-2 h-auto w-full max-w-[336px] object-contain" />}
 										<span className="block text-xs text-slate-500">{s.subtitle}</span>
 									</span>
 									<ExternalLink className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
