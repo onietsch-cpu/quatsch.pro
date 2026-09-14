@@ -87,3 +87,16 @@ test('transcribe validates audio payloads before provider calls', async (t) => {
 	assert.equal(response.status, 422);
 	assert.deepEqual(await response.json(), { error: 'A valid audio recording is required.' });
 });
+
+test('security policy rejects inline scripts and embedding, and request IDs are bounded', async (t) => {
+	const server = startServer({ port: 0 });
+	await new Promise((resolve) => server.once('listening', resolve));
+	t.after(() => new Promise((resolve) => server.close(resolve)));
+	const response = await fetch(`http://127.0.0.1:${server.address().port}/healthz`, { headers: { 'x-request-id': 'x'.repeat(1000) } });
+	const csp = response.headers.get('content-security-policy');
+	assert.match(csp, /script-src 'self';/);
+	assert.match(csp, /frame-ancestors 'none'/);
+	assert.match(csp, /object-src 'none'/);
+	assert.ok(csp.includes('https://a1.awin1.com'));
+	assert.equal(response.headers.get('x-request-id').length, 36);
+});

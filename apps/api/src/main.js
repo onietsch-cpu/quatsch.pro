@@ -29,15 +29,24 @@ export function createApp() {
 	app.set('trust proxy', 1);
 
 	app.use((req, res, next) => {
-		req.requestId = req.headers['x-request-id'] || crypto.randomUUID();
+		const suppliedId = req.headers['x-request-id'];
+		req.requestId = typeof suppliedId === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(suppliedId) ? suppliedId : crypto.randomUUID();
 		res.setHeader('X-Request-Id', req.requestId);
 		next();
 	});
 	app.use(helmet({
-		contentSecurityPolicy: false,
+		contentSecurityPolicy: { directives: {
+			defaultSrc: ["'self'"], scriptSrc: ["'self'"],
+			styleSrc: ["'self'", "'unsafe-inline'"],
+			imgSrc: ["'self'", 'data:', 'blob:', 'https://www.awin1.com', 'https://a1.awin1.com'],
+			fontSrc: ["'self'"], connectSrc: ["'self'"], mediaSrc: ["'self'", 'blob:'],
+			objectSrc: ["'none'"], frameAncestors: ["'none'"], baseUri: ["'self'"],
+			formAction: ["'self'"], upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,
+		} },
 		crossOriginEmbedderPolicy: false,
 	}));
-	app.use(morgan('combined'));
+	// Never log query strings: TTS GET requests may contain translated text.
+	app.use(morgan((tokens, req, res) => [tokens.method(req, res), req.path, tokens.status(req, res), tokens['response-time'](req, res), 'ms'].join(' ')));
 
 	app.get('/healthz', (req, res) => {
 		res.setHeader('Cache-Control', 'no-store');
@@ -67,6 +76,9 @@ export function createApp() {
 		index: false,
 		maxAge: process.env.NODE_ENV === 'production' ? '1h' : 0,
 		setHeaders(res, filePath) {
+			if (filePath.startsWith(path.join(webDist, 'assets') + path.sep)) {
+				res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+			}
 			if (filePath.endsWith('.html') || filePath.endsWith('sw.js')) {
 				res.setHeader('Cache-Control', 'no-cache');
 			}

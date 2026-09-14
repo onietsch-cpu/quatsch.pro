@@ -1,3 +1,4 @@
+import RecordingControls from '@/components/RecordingControls';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet';
 import {
@@ -35,11 +36,9 @@ import {
 	stopSpeaking,
 	loadVoices,
 	onVoicesChanged,
-	isSpeechRecognitionSupported,
-	createTimedSpeechRecognition,
-	SPEECH_INPUT_MAX_DURATION_MS,
-	SPEECH_INPUT_END_PAUSE_MS,
 } from '@/lib/speech';
+import { createManualAudioTranscription, isAudioCaptureSupported } from '@/lib/audioCapture';
+import { transcribeAudio } from '@/lib/transcriptionClient';
 import { addHistoryEntry, getSettings } from '@/lib/storage';
 import { copyTextToClipboard } from '@/lib/clipboard';
 
@@ -62,11 +61,12 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 	const langA = useMemo(() => getLanguageByCode(langACode), [langACode]);
 	const langB = useMemo(() => getLanguageByCode(langBCode), [langBCode]);
 
+	const [recordingState, setRecordingState] = useState('idle');
 	const [snap, setSnap] = useState(null);
 	const [settings, setSettings] = useState(() => getSettings());
 	const [confirmOpen, setConfirmOpen] = useState(false);
 	const [textInput, setTextInput] = useState('');
-	const [recognitionSupported] = useState(() => Boolean(isSpeechRecognitionSupported()));
+	const [recognitionSupported] = useState(() => isAudioCaptureSupported());
 
 	const engineRef = useRef(null);
 	const honeypotRef = useRef(null);
@@ -92,11 +92,10 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 			rate: getSettings().rate,
 			adapters: {
 				recognize({ langCode, onResult, onError, onEnd }) {
-					return createTimedSpeechRecognition({
+					return createManualAudioTranscription({
 						langCode,
-						maxDurationMs: SPEECH_INPUT_MAX_DURATION_MS,
-						endPauseMs: SPEECH_INPUT_END_PAUSE_MS,
-						// Keep recognition open across browser-final fragments so the configured\n						// 1.6-second speech pause, rather than Chrome's early final result, ends the turn.\n						continuous: true,
+						transcribe: transcribeAudio,
+						onState: setRecordingState,
 						onResult,
 						onError,
 						onEnd,
@@ -181,9 +180,9 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 			const engine = engineRef.current;
 			if (!engine) return;
 			if (state === STATES.LISTENING) {
-				// Pressing the active mic button cancels the ongoing recording.
+				// Pressing the active mic stops capture without uploading.
 				if (engine.direction === dir) {
-					engine.pause();
+					engine.holdRecording();
 				}
 				return;
 			}
@@ -231,11 +230,11 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 	const hiddenCount = Math.max(0, history.length - MAX_RENDERED_TURNS);
 
 	const canSubmitText =
-		state === STATES.AWAITING_TAP || state === STATES.ERROR || state === STATES.PAUSED;
+		state === STATES.AWAITING_TAP || state === STATES.ERROR || (state === STATES.PAUSED && !snap?.hasRecording);
 
 	const statusText =
 		(state === STATES.LISTENING &&
-			`Listening — ${direction === 'AtoB' ? langA.name : langB.name} · translates after a short pause`) ||
+			`Listening — ${direction === 'AtoB' ? langA.name : langB.name} · stop or translate when ready`) ||
 		(state === STATES.TRANSLATING && 'Translating — please wait …') ||
 		(state === STATES.SPEAKING && `Reading aloud — ${direction === 'AtoB' ? langB.name : langA.name}`) ||
 		(state === STATES.PAUSED && 'Paused') ||
@@ -292,7 +291,7 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 						<div className="rounded-2xl border border-dashed border-slate-200 bg-white px-5 py-10 text-center">
 							<p className="text-sm text-slate-500">
 								Press the microphone button for the direction you want to speak. The app records
-								one utterance, translates it into the other language and reads it aloud (if
+								until you stop it. Press Start translation to translate and read it aloud (if
 								auto-read is on). Then it waits for your next button press — it never switches
 								direction on its own.
 							</p>
@@ -377,6 +376,8 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 
 					<p className="mt-3 text-center text-sm font-semibold text-slate-700">{statusText}</p>
 
+					{(state === STATES.LISTENING || (state === STATES.PAUSED && snap?.hasRecording)) && <RecordingControls state={recordingState} onPause={handlePause} onResume={handleResume} onStop={() => engineRef.current?.holdRecording()} onTranslate={() => engineRef.current?.finishRecording()} />}
+
 					{state === STATES.SPEAKING && (
 						<button
 							onClick={handleStopSpeaking}
@@ -394,8 +395,8 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 
 					<p className="mt-2 flex items-start gap-1.5 text-center text-[11px] leading-snug text-slate-400">
 						<ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-						Spoken content is processed only for transcription and translation. Audio is not
-						permanently stored.
+						Recordings are sent for transcription only when you start translation.
+						This app does not save audio recordings.
 					</p>
 
 					{/* Honeypot — invisible to real users */}
@@ -437,7 +438,7 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 
 					{/* Dialog controls */}
 					<div className="mt-4 grid grid-cols-2 gap-2">
-						{state === STATES.PAUSED ? (
+						{!(state === STATES.LISTENING || snap?.hasRecording) && (state === STATES.PAUSED ? (
 							<button
 								onClick={handleResume}
 								className="inline-flex items-center justify-center gap-1.5 rounded-2xl bg-[#1976D2] px-3 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#0B1F3A] active:scale-[0.98]"
@@ -452,7 +453,7 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 							>
 								<Pause className="h-4 w-4" /> Pause
 							</button>
-						)}
+						))}
 						<button
 							onClick={() => setConfirmOpen(true)}
 							className="inline-flex items-center justify-center gap-1.5 rounded-2xl border border-slate-200 px-3 py-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 active:scale-[0.98]"
@@ -522,7 +523,7 @@ function DirectionMicButton({ fromName, toName, accent, isActive, state, recogni
 		state === STATES.ENDED;
 
 	// The active direction's button stays enabled while listening so the user
-	// can cancel the recording by pressing it again.
+	// can stop the recording by pressing it again.
 	const canCancelListening = isActive && state === STATES.LISTENING;
 	const disabled = locked && !canCancelListening && state !== STATES.AWAITING_TAP;
 
@@ -558,7 +559,7 @@ function DirectionMicButton({ fromName, toName, accent, isActive, state, recogni
 		icon = <Mic className="h-7 w-7" />;
 	}
 
-	const label = `Speak ${fromName} → ${toName}`;
+	const label = isListeningHere ? 'Stop recording' : `Speak ${fromName} → ${toName}`;
 
 	return (
 		<button

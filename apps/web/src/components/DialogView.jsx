@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import RecordingControls from '@/components/RecordingControls';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
 	Mic,
 	Loader2,
@@ -15,7 +16,9 @@ import {
 	RotateCw,
 	ChevronDown,
 } from 'lucide-react';
-import PhotoTranslator from '@/components/PhotoTranslator';
+import { createManualAudioTranscription, isAudioCaptureSupported } from '@/lib/audioCapture';
+import { transcribeAudio } from '@/lib/transcriptionClient';
+const PhotoTranslator = lazy(() => import('@/components/PhotoTranslator'));
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -43,12 +46,9 @@ import {
 	stopSpeaking,
 	loadVoices,
 	onVoicesChanged,
-	isSpeechRecognitionSupported,
-	createTimedSpeechRecognition,
-	SPEECH_INPUT_MAX_DURATION_MS,
 } from '@/lib/speech';
 
-export default function DialogView({ mode, targetCode, langACode, langBCode, onEndDialog }) {
+export default function DialogView({ mode, targetCode, langACode, langBCode, onEndDialog, initialInputTab = 'speak' }) {
 	const isDialogMode = mode === 'dialog';
 
 	const langA = isDialogMode ? getLanguageByCode(langACode) : null;
@@ -73,14 +73,15 @@ export default function DialogView({ mode, targetCode, langACode, langBCode, onE
 	const [currentResult, setCurrentResult] = useState(null);
 	const [textInput, setTextInput] = useState('');
 	const [isTranslating, setIsTranslating] = useState(false);
+	const [recordingState, setRecordingState] = useState('idle');
 	const [isListening, setIsListening] = useState(false);
 	// Fehler speichert die zugehörige Eingabe, damit sie erneut ausgeführt werden kann.
 	const [error, setError] = useState(null);
 	const [confirmOpen, setConfirmOpen] = useState(false);
 	const [langPickerOpen, setLangPickerOpen] = useState(false);
-	const [recognitionSupported] = useState(() => Boolean(isSpeechRecognitionSupported()));
+	const [recognitionSupported] = useState(() => isAudioCaptureSupported());
 	const [settings, setSettings] = useState(() => getSettings());
-	const [inputTab, setInputTab] = useState('speak'); // 'speak' | 'photo'
+	const [inputTab, setInputTab] = useState(initialInputTab); // 'speak' | 'photo'
 
 	// Race-Condition-Schutz: jede Übersetzung bekommt eine aufsteigende ID.
 	// Nur das Ergebnis der aktuell neuesten ID darf das angezeigte Ergebnis überschreiben.
@@ -89,6 +90,7 @@ export default function DialogView({ mode, targetCode, langACode, langBCode, onE
 	const lastInputRef = useRef('');
 
 	const recognitionRef = useRef(null);
+	useEffect(() => () => { recognitionRef.current?.stop(); requestIdRef.current += 1; stopSpeaking(); }, []);
 	const bottomRef = useRef(null);
 	const textHoneypotRef = useRef(null);
 
@@ -218,7 +220,7 @@ export default function DialogView({ mode, targetCode, langACode, langBCode, onE
 		// In dialog mode a new input may only start once the previous
 		// translation finished and the speaking direction switched,
 		// otherwise it translates into the wrong language.
-		if (isDialogMode && isTranslating) return;
+		if (isListening || isTranslating) return;
 		const value = textInput.trim();
 		if (!value) return;
 		if (value.length > 5000) {
@@ -227,7 +229,7 @@ export default function DialogView({ mode, targetCode, langACode, langBCode, onE
 		}
 		setTextInput('');
 		runTranslation(value);
-	}, [textInput, runTranslation, isDialogMode, isTranslating]);
+	}, [textInput, runTranslation, isListening, isTranslating]);
 
 	// Letzte fehlgeschlagene Eingabe erneut ausführen (ohne ältere Inhalte zu verwenden).
 	const handleRetry = useCallback(() => {
@@ -255,7 +257,7 @@ export default function DialogView({ mode, targetCode, langACode, langBCode, onE
 		if (!recognitionSupported) return;
 
 		if (isListening) {
-			stopListening({ submitResult: true });
+			recognitionRef.current?.hold();
 			return;
 		}
 
@@ -265,9 +267,10 @@ export default function DialogView({ mode, targetCode, langACode, langBCode, onE
 
 		// In dialog mode use the current speaker's language code for accurate transcription.
 		// In single mode leave it empty so the browser auto-detects the source language.
-		const recognition = createTimedSpeechRecognition({
+		const recognition = createManualAudioTranscription({
 			langCode: isDialogMode && speaker ? speaker.code : '',
-			maxDurationMs: SPEECH_INPUT_MAX_DURATION_MS,
+			transcribe: transcribeAudio,
+			onState: setRecordingState,
 			onResult: (spoken) => {
 				runTranslation(spoken);
 			},
@@ -278,6 +281,8 @@ export default function DialogView({ mode, targetCode, langACode, langBCode, onE
 						message: 'Microphone access was not granted. Please allow microphone access or use text input.',
 						input: '',
 					});
+				} else if (event.error === 'too-large') {
+					setError({ message: 'Recording exceeds 8 MB. Please record a shorter section.', input: '' });
 				} else if (event.error === 'no-speech') {
 					setError({
 						message: 'Nothing could be understood. Please speak more clearly or use text input.',
@@ -361,7 +366,7 @@ export default function DialogView({ mode, targetCode, langACode, langBCode, onE
 									{headerTitle}
 								</p>
 								<button
-									onClick={() => setLangPickerOpen(true)}
+									disabled={isListening || isTranslating} onClick={() => setLangPickerOpen(true)}
 									className="mt-0.5 inline-flex items-center gap-1 text-lg font-extrabold text-slate-900 transition-colors hover:text-[#1976D2] active:scale-[0.98]"
 									aria-label="Zielsprache ändern"
 								>
@@ -389,7 +394,7 @@ export default function DialogView({ mode, targetCode, langACode, langBCode, onE
 									{langA.name}
 								</span>
 								<button
-									onClick={toggleDirection}
+									disabled={isListening || isTranslating} onClick={toggleDirection}
 									aria-label="Sprechrichtung wechseln"
 									className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 active:scale-95"
 								>
@@ -418,7 +423,7 @@ export default function DialogView({ mode, targetCode, langACode, langBCode, onE
 							<p className="text-sm text-slate-500">
 								{isDialogMode
 									? `Let's go: first one person speaks in ${langA.name}, then it is automatically translated into ${langB.name} – and vice versa.`
-									: 'Tap the microphone or enter text below to start your first translation.'}
+									: inputTab === 'photo' ? 'Translate menus, signs and documents. Take a photo or upload an image below.' : 'Tap the microphone or enter text below to start your first translation.'}
 							</p>
 						</div>
 					)}
@@ -481,14 +486,14 @@ export default function DialogView({ mode, targetCode, langACode, langBCode, onE
 								<Mic className="h-4 w-4" /> Speak / Text
 							</button>
 							<button
-								onClick={() => setInputTab('photo')}
+								disabled={isListening || isTranslating} onClick={() => setInputTab('photo')}
 								className={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
 									inputTab === 'photo'
 										? 'bg-white text-slate-900 shadow-sm'
 										: 'text-slate-500 hover:text-slate-700'
 								}`}
 							>
-								<ImageIcon className="h-4 w-4" /> Photo
+								<ImageIcon className="h-5 w-5" /> Photo translation
 							</button>
 						</div>
 					)}
@@ -496,11 +501,13 @@ export default function DialogView({ mode, targetCode, langACode, langBCode, onE
 					{/* Photo translator panel */}
 					{!isDialogMode && inputTab === 'photo' && (
 						<div className="mb-4">
+							<Suspense fallback={<p role="status">Loading photo translation …</p>}>
 							<PhotoTranslator
 								targetCode={activeTargetCode}
 								targetName={singleTarget?.name}
 								settings={settings}
 							/>
+							</Suspense>
 						</div>
 					)}
 
@@ -510,25 +517,27 @@ export default function DialogView({ mode, targetCode, langACode, langBCode, onE
 					<div className="flex flex-col items-center">
 						<button
 							onClick={startListening}
-							disabled={!recognitionSupported || (isDialogMode && isTranslating)}
+							disabled={!recognitionSupported || isTranslating || (isListening && !['recording', 'paused'].includes(recordingState))}
 							className={`flex h-20 w-20 items-center justify-center rounded-full text-white transition-colors disabled:cursor-not-allowed disabled:bg-slate-300 ${
 								isListening
 									? 'animate-mic-pulse bg-teal-500'
 									: 'bg-[#1976D2] hover:bg-[#0B1F3A]'
 							}`}
-							aria-label={isListening ? 'Aufnahme beenden und übersetzen' : 'Zum Sprechen tippen'}
+							aria-label={isListening ? 'Aufnahme stoppen' : 'Zum Sprechen tippen'}
 						>
 							{isListening ? <StopCircle className="h-9 w-9" /> : <Mic className="h-9 w-9" />}
 						</button>
 						<p className="mt-2 text-sm font-semibold text-slate-700">
 							{isListening
-								? 'Listening — tap again to translate'
+								? (recordingState === 'transcribing' ? 'Transcribing …' : recordingState === 'starting' ? 'Waiting for microphone …' : recordingState === 'stopped' ? 'Recording stopped — ready to translate' : recordingState === 'paused' ? 'Recording paused' : 'Recording — stop or translate when ready')
 								: isDialogMode && isTranslating
 								? 'Translating — please wait for your turn …'
 								: isDialogMode
 								? `Now speaking: ${speaker.name} → translated into ${destination.name}`
 								: 'Tap to speak'}
 						</p>
+
+						{isListening && <RecordingControls state={recordingState} onPause={() => recognitionRef.current?.pause()} onResume={() => recognitionRef.current?.resume()} onStop={() => recognitionRef.current?.hold()} onTranslate={() => recognitionRef.current?.finish()} />}
 
 						{!recognitionSupported && (
 							<p className="mt-2 max-w-sm text-center text-xs text-amber-700">
@@ -538,7 +547,7 @@ export default function DialogView({ mode, targetCode, langACode, langBCode, onE
 
 						<p className="mt-2 flex items-start gap-1.5 text-center text-[11px] leading-snug text-slate-400">
 							<ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-							Spoken content is processed exclusively for transcription and translation. Audio recordings are not permanently stored.
+							Recordings are sent for transcription only when you start translation. This app does not save audio recordings.
 						</p>
 					</div>
 
@@ -574,7 +583,7 @@ export default function DialogView({ mode, targetCode, langACode, langBCode, onE
 						/>
 						<button
 							onClick={handleTextSubmit}
-							disabled={!textInput.trim() || (isDialogMode && isTranslating)}
+							disabled={!textInput.trim() || isListening || isTranslating}
 							className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-teal-500 px-6 py-3.5 text-base font-bold text-white transition-colors hover:bg-teal-600 disabled:cursor-not-allowed disabled:bg-slate-300"
 						>
 							{isTranslating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
