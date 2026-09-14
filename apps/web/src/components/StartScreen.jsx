@@ -105,8 +105,8 @@ export default function StartScreen({ onStart }) {
 					<div className="mt-6 flex items-start gap-2 rounded-2xl border border-[#1976D2]/20 bg-[#EAF2FB] px-4 py-3 text-left text-xs leading-relaxed text-[#0B1F3A]">
 						<ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
 						<div className="flex-1">
-							For translations, the entered text or speech transcript is sent to the translation
-							service used. Audio recordings are not permanently stored.
+							Text, photos and submitted audio are sent to the translation service.
+							Recordings are sent only when you start translation. This app does not save audio recordings.
 							<button
 								onClick={() => {
 									ackPrivacy();

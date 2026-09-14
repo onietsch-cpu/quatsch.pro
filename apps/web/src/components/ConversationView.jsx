@@ -395,8 +395,8 @@ export default function ConversationView({ langACode, langBCode, onEndDialog }) 
 
 					<p className="mt-2 flex items-start gap-1.5 text-center text-[11px] leading-snug text-slate-400">
 						<ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-						Spoken content is processed only for transcription and translation. Audio is not
-						permanently stored.
+						Recordings are sent for transcription only when you start translation.
+						This app does not save audio recordings.
 					</p>
 
 					{/* Honeypot — invisible to real users */}
